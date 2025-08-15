@@ -1,0 +1,90 @@
+{
+    "roisize": 16,
+    "sigma": 0.92,
+    "frames": [
+        0,
+        1000
+    ],
+    "drift_bins": 4,
+    "pixelsize": 128,
+    "frametime": 0.02,
+    "FoV_prefix": "FoV_",
+    "FoV_num_digits": 4, 
+    "path": "",
+    "resultsdir": "results/",
+    "bright": "/pi/david.grunwald-umw/data/yeast_data/bright_images_green_channel_20ms_300EM.tiff",
+    "dark": "/pi/david.grunwald-umw/data/yeast_data/dark_images_green_channel_20ms_300EM.tiff",
+    "model_NE": "/home/jocelyn.tourtellotte-umw/src_yeast_pipeline/trained_models/Modelweights_NE_segmentation.pt",
+    "model_bg": "/home/jocelyn.tourtellotte-umw/src_yeast_pipeline/trained_models/model_wieghts_background_psf.pth",
+    "FoV_collection_path": "/pi/david.grunwald-umw/data/yeast_data/",
+    "save_folder": "merged_results/",
+    "trackdata": "tracks.data",
+    "moviename": "test.mp4",
+    "save_figures": false,
+    "save_movies": false,
+        "registration": {
+        "frame_range": [
+            0,
+            250
+        ],
+        "frames_per_average": 50,
+        "drift_bins": 4,
+        "max_reg_diff": 0.50,
+        "upsample_factor": 1000,
+        "upscale_factor": 1
+    },
+    "responsivity": {
+        "frame_range": [
+            0,
+            250
+        ]
+    },
+    "ne_fit": {
+        "default_model": "richards_gaussian",
+        "model_list": [
+            {
+                "name": "richards_gaussian",
+                "parameters": 11,
+                "initial_guess": [0.4, 1, 1, 0.5, 0.35, 0, 0]
+            },
+            {
+                "name": "gaussian_linear",
+                "parameters": 6,
+                "initial_guess": [0, 0, 0, 0, 0, 0]
+            }
+        ],
+        "lm_optimizer":
+            {
+                "step_radius":1.0,
+                "step_size":0.1,
+                "iterations": 50
+            },
+        "plot_test_imgs": false,
+        "use_merged_clusters": true,
+        "masking_threshold": 0.5,
+        "qc_min_labeled": 75,
+        "bbox_dim": {"width": 75,
+                    "height": 75},
+        "max_merge_dist": 10,
+        "line_length": 12,
+        "frame_range": [
+            0,
+            250
+        ],
+        "normal_lines_n": 1000,
+        "n_samples_along_normal": 100,
+        "initial_guess": {  "B": 0.4,
+                            "C": 1,
+                            "nu": 1,
+                            "Q": 0.5,
+                            "offset": 0 },
+        "step_radius":1.0,
+        "step_size":0.1,
+        "iterations": 50,
+        "learning_rate": 0.1,
+        "convergence_tolerance":  1e-6,
+        "convergence_patience":  5,
+        "little_lambda": 1e-3,
+        "offset_correction": false
+    }
+}
