@@ -18,6 +18,10 @@ ipython_config.py
 *.Rproj
 *.Rdata
 
-# File types that will be stored in a data repository
+# system affiliated files
+.DS_Store
+
+# Directories for testing data
+# Data will be available from a data repository
 /example_data/
 /example_data/*
