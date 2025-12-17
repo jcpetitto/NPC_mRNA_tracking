@@ -1,0 +1,143 @@
+---
+title: "Dual Label: Registration (Draft)"
+format:
+    html:
+        # html-table-processing: none
+        embed-resources: true
+        code-fold: true
+        # code-tools: true
+        code-overflow: wrap
+execute:
+    enabled: true
+    cache: true
+knitr:
+    opts_chunk:
+        message: false
+---
+
+```{css}
+#| label: css-definitions
+#| include: false
+
+figure.quarto-float-tbl figcaption.quarto-float-caption-top{
+    text-align: left !important;
+}
+
+caption, .table-caption {
+    text-align: left !important;
+}
+
+figcaption {
+  text-align: left !important;
+}
+
+.summary-table {
+    font-size: 12px;        
+    border: 1px solid #ddd;
+    margin-bottom: 20px; 
+}
+
+.summary-table th {
+    background-color: #f2f2f2 !important;
+    font-weight: bold;
+    text-align: center;
+}
+
+.scrollable-cell {
+  height: 100px;         /* Set a fixed height for the cell */
+  width: 200px;          /* Set a fixed width */
+  overflow-y: auto;      /* Add a vertical scrollbar if content overflows */
+  display: block;        /* Necessary for height to work correctly */
+}
+
+.highlighter{
+    background-color:yellow;
+}
+```
+
+```{r}
+#| label: library-imports
+#| include: false
+library(jsonlite)
+library(tidyverse)
+library(tidyr)
+library(knitr)
+library(glue)
+# library(cowplot)
+library(kableExtra)
+library(patchwork)
+```
+
+```{r}
+#| label: knitr-options
+#| include: false
+options(knitr.kable.NA='')
+```
+
+```{r}
+#| label: directory-paths
+#| include: false
+src_r_dir <- "/Users/jctourtellotte/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/src_yeast_pipeline/src_R/"
+dual_label_path <- "/Users/jctourtellotte/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/yeast_output/dual_label_experiments/"
+no_merge_reg_subdir <- "no_merge/registration/"
+merged_reg_subdir <- "merged/registration/"
+```
+
+```{r}
+#| label: sourcing scripts
+#| include: false
+# TODO: put file location root in a config
+source('./src_R/r_utility_fns.R')
+source('./src_R/experiment_key.R')
+```
+
+```{r}
+#| label: set-globals
+#| include: false
+PIXEL_TO_NM <- 128
+strains_to_include <- c("BMY1408", "BMY1409", "BMY1410")
+
+table_num <- 1
+```
+
+```{r}
+#| label: import-experiment-key
+#| include: false
+all_experiment_key <- read_csv(paste0(dual_label_path, "dual_label_exper_table.csv")) %>% dplyr::filter(strain %in% strains_to_include)
+all_experiment_key_n <- all_experiment_key %>% group_by(strain, date, addl_info) %>% summarise(FoV_count = n()) %>% ungroup()
+
+all_experiment_key <- left_join(all_experiment_key, all_experiment_key_n) %>% relocate(FoV_count, .after = addl_info)
+```
+
+
+# Distance Calculations
+
+```{r}
+longest_seg_dist_data <- load_results_csv("/Users/jctourtellotte/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/yeast_output/dual_label_experiments/merge/distances/merge_seg_reg_data.csv", strains_to_include, all_experiment_key)
+merged_seg_reg_data <- load_results_csv("/Users/jctourtellotte/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/yeast_output/dual_label_experiments/no_merge/distances/no_merge_seg_dist_data.csv", strains_to_include, all_experiment_key)
+```
+
+**Q:** what if the longest segments are not at all near each other
+
+```{r}
+grouping_columns <- c("strain", "addl_info", "FoV_id")
+summary_columns <- c("dist")
+title_columns <- c("strain", "addl_info")
+
+lgt_seg_dist_to_plot <- prepare_reg_data_for_plotting(longest_seg_dist_data, grouping_columns, summary_columns, strains_to_include, title_columns)
+
+mrg_seg_dist_to_plot <- prepare_reg_data_for_plotting(merged_seg_reg_data, grouping_columns, summary_columns, strains_to_include, title_columns)
+
+# NOTE: this function works, but the one consolidating this and kbl is a bit messed up at the moment
+```
+
+```{r}
+create_histogram_plot_grid(dplyr::filter(lgt_seg_dist_to_plot, between(dist, -2*dist_sd + dist_mean, dist_mean + 2*dist_sd)), "dist", c("strain", "date","addl_info"), x_limit_method = "minmax", num_cols = 2)
+```
+
+```{r}
+create_histogram_plot_grid(dplyr::filter(mrg_seg_dist_to_plot, between(dist, -2*dist_sd + dist_mean, dist_mean + 2*dist_sd)), "dist", c("strain", "date","addl_info"), x_limit_method = "minmax", num_cols = 2)
+```
+
+
+
