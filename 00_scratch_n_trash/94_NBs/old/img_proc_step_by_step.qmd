@@ -1,0 +1,330 @@
+---
+title: "Image Processing"
+author: "Jocelyn Tourtellotte"
+format: html
+---
+
+```{r}
+#| label: r-importants
+#| include: false
+library(tidyverse)
+library(viridis)
+library(cowplot)
+library(reticulate)
+# use_condaenv("yeast_py")
+```
+
+```{python}
+#| label: py-importants
+#| include: false
+
+import tifffile
+import numpy as np
+import matplotlib.pyplot as plt
+
+import skimage
+
+from yeast_pipeline import YeastPipeline
+from image_processor import ImageProcessor
+
+from utils.npc_detect_initial import apply_segment_ne_model
+from utils.Neural_networks import Segment_NE
+```
+
+```{python}
+#| label: py-imgproc-setup
+#| include: false
+
+PATH_TO_EXAMPLE = 'config_options_1ex.json'
+
+pipeline = YeastPipeline()
+pipeline.load_config_file(PATH_TO_EXAMPLE)
+
+img_proc = ImageProcessor(config_dict = pipeline.get_config(), device = pipeline.get_device())
+```
+
+The pipeline steps using an exemplar FoV.
+
+# NE Detection
+
+## Initial Detection
+
+For this step, an instance of the `ImageProcssor` class utilizes `detect_npc` imported from `utils.npc_detect_initial`
+
+```{python}
+#| label: py-ex-FoV-setup
+
+FoV_dict = img_proc._get_FoV_collection_dict()
+frame_range = img_proc._cfg['ne_fit']['frame_range']
+ne_trained_model = img_proc._cfg['model_NE']
+current_device = img_proc._current_device
+masking_threshold = img_proc._cfg['ne_fit']['masking_threshold']
+qc_min_labeled = img_proc._cfg['ne_fit']['qc_min_labeled']
+plot_test_imgs = img_proc._cfg['ne_fit']['plot_test_imgs']
+
+ex_entry_dict = FoV_dict[0]
+img_track_path =  ex_entry_dict['FoV_collection_path'] + ex_entry_dict['imgs']['fn_track_npc']
+FoV_id = ex_entry_dict['FoV_id']
+img_width = 256
+```
+
+
+```{r}
+#| label: r-helper-fns
+#| include: false
+py_img_to_r_df_fn <- function(py_img_array){
+    img_df <- py_img_array %>%
+        mutate(y_pos = row_number()) %>%
+        pivot_longer(
+            cols = -y_pos,
+            names_to = "x_name",
+            values_to = "value") %>%
+        mutate(x_pos = as.numeric(gsub("V", "", x_name))) %>%
+        select(y_pos, x_pos, value)
+    return(img_df)
+}
+```
+
+
+```{r}
+#| label: r-plotting-fns
+#| include: false
+
+pixel_breaks <- c(1, 64, 128, 192, 256)
+
+plt_labled_img_in_r <- function(img_df, zero_is_bg = TRUE){
+    unique_values = unique(img_df$value)
+    legend_colors = inferno(length(unique_values))
+    legend_labels <- setNames(as.character(unique_values), unique_values)
+    
+    legend_labels["0"] <- ifelse(zero_is_bg, "background", "0")
+    
+    img_plt <- ggplot(img_df,
+                      aes(x = x_pos,
+                          y = y_pos,
+                          fill = as.factor(value))
+                      ) +
+        geom_tile() +
+        scale_fill_manual(values = legend_colors, labels = legend_labels) +
+        scale_y_reverse(breaks = pixel_breaks) + 
+        scale_x_continuous(breaks = pixel_breaks, position = "top") +
+        labs(x = NULL, y = NULL) +
+        coord_fixed(ratio = 1, expand = FALSE) +
+        theme_minimal() +
+        theme(panel.grid = element_blank())
+    
+    return(img_plt)
+}
+
+plt_intensity_img_in_r <- function(img_df){
+    intensity_plt <- ggplot(data = img_df, aes(x_pos, y_pos)) + 
+        geom_raster(aes(fill = value)) +
+        scale_fill_viridis(discrete = FALSE, option = "B") +
+        scale_y_reverse(breaks = pixel_breaks) +
+        scale_x_continuous(breaks = pixel_breaks, position = "top") +
+        labs(x = NULL, y = NULL) +
+        coord_fixed(ratio = 1, expand = FALSE) +
+        theme_minimal() +
+        theme(panel.grid = element_blank())
+    return(intensity_plt)
+}
+```
+
+### For each FoV:
+
+#### 1. Create representative image (FoV)
+
+```{python}
+npc_track_img = tifffile.imread(img_track_path)[frame_range[0]:frame_range[1]]
+npc_img_mean = np.mean(npc_track_img, axis = 0)
+pad_size = int((img_width - np.shape(npc_img_mean)[0])/2) # limits image size
+npc_img_mean = npc_img_mean/np.max(npc_img_mean)
+```
+
+```{r}
+npc_mean_img_df <- py_img_to_r_df_fn(as.data.frame(py$npc_img_mean))
+plt_intensity_img_in_r(npc_mean_img_df) + labs(fill="Relative Intensity")
+```
+
+#### 2. Apply a trained neural network for image segmentation and labeling (FoV)
+
+```{python}
+architecture = "FPN"
+encoder = "resnet34"
+
+npc_labeled_img, _ = apply_segment_ne_model(ne_trained_model, npc_img_mean, pad_size, masking_threshold, architecture, encoder, current_device)
+
+```
+
+```{r}
+npc_labeled_img_df <- py_img_to_r_df_fn(as.data.frame(py$npc_labeled_img))
+
+npc_labeled_img_plt <- plt_labled_img_in_r(npc_labeled_img_df) + labs(fill="Label")
+npc_labeled_img_plt
+```
+
+#### QC: Check total area masked for each label
+
+The area of a label is defined as the total number of pixels with that label. A minimum threshold is set for an individual label's area for that label to be considered going forward.
+
+```{python}
+ne_mask_label_set = np.unique(npc_labeled_img, return_counts = True)
+
+def check_mask_fn(label_with_count):
+    if label_with_count[0] != 0 and label_with_count[1] >= qc_min_labeled:
+        return True
+    else:
+        return False
+
+usable_mask_labels = ne_mask_label_set[0][np.apply_along_axis(check_mask_fn, 0, ne_mask_label_set)].tolist()
+
+npc_labeled_img[~np.isin(npc_labeled_img, list(usable_mask_labels))] = 0
+```
+
+Usable mask labels: `r py$usable_mask_labels`
+
+### For each label in a FoV:
+
+#### 3. Binary dilation of image labels (NE)
+Encoding of image becomes: 0 - background 1 - foreground where the current label is converted to foreground and the others are converted to background.
+
+The kernel used for binary dilation is a 3 x 3 array of 1s. Each foreground containing pixel in the representative image is expanded by 1 pixel in each direction. This makes the maximum gap filling distance of this step 2 pixels.
+
+1-D example:
+
+`[0 0 1 0 0 0 1 0 0] -> [0 1 1 1 0 1 1 1 0]`
+
+while
+
+`[0 0 1 0 0 1 1 0 0] -> [0 1 1 1 1 1 1 1 0]`
+
+```{python}
+bi_dil_imgs = []
+for ne_mask_label in usable_mask_labels:
+    current_img = npc_labeled_img == ne_mask_label
+    # simultaneously select only the specified label AND change to boolean
+    #   for improved performance re: binary dilation
+    current_img = skimage.morphology.binary_dilation(current_img, np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]))
+    
+    bi_dil_imgs.append(current_img)
+```
+
+
+
+
+```{r}
+bbox_points <- as.data.frame(py$bbox_points)
+bbox_points <- bbox_points %>% rename(y=V1, x=V2)
+```
+
+```{r}
+bi_dil_plots <- lapply(py$bi_dil_imgs, function(var) {
+    current_img_df <- py_img_to_r_df_fn(as.data.frame(var))
+    
+    current_img_plt <- plt_labled_img_in_r(current_img_df) +
+        guides(fill = "none")
+})
+
+cowplot::plot_grid(plotlist = bi_dil_plots, nrow=2, ncol=2)
+```
+
+
+```{r}
+
+plot_with_rect <- function(py_data, bbox_dim){
+    current_img_df <- py_img_to_r_df_fn(as.data.frame(py_data))
+    
+    xmin = min(current_img_df[current_img_df$value, ]$x_pos)
+    xmax = max(current_img_df[current_img_df$value, ]$x_pos)
+    ymin = min(current_img_df[current_img_df$value, ]$y_pos)
+    ymax = max(current_img_df[current_img_df$value, ]$y_pos)
+    
+    x_diff = xmax - xmin
+    y_diff = ymax - ymin
+    
+    new_x_max = 0.5*x_diff + xmin + 0.5*bbox_dim$width
+    new_x_min = 0.5*x_diff + xmin - 0.5*bbox_dim$width
+    new_y_max = 0.5*y_diff + ymin + 0.5*bbox_dim$height
+    new_y_min = 0.5*y_diff + ymin - 0.5*bbox_dim$height
+    
+    current_img_plt <- plt_labled_img_in_r(current_img_df) +
+        guides(fill = "none") +
+        annotate("rect",
+           xmin = new_x_min,
+           xmax = new_x_max,
+           ymin = new_y_min,
+           ymax = new_y_max,
+           fill = NA,          # No fill color
+           color = "red",       # Border color
+           linewidth = 1)    # Border thickness
+    return(current_img_plt)
+}
+
+bi_dil_plots <- lapply(py$bi_dil_imgs, plot_with_rect, bbox_dim = tibble(width = 75, height = 75))
+
+cowplot::plot_grid(plotlist = bi_dil_plots, nrow=2, ncol=2)
+```
+
+```{python}
+def crop_to_fixed_size_box(
+    image: np.ndarray,
+    width: int,
+    height: int
+) -> np.ndarray | None:
+    """
+    Finds the content in a boolean image, and returns a cropped portion of a
+    fixed size centered on that content.
+
+    Args:
+        image: The 2D boolean numpy array to crop.
+        width: The desired width of the final cropped image.
+        height: The desired height of the final cropped image.
+
+    Returns:
+        A new numpy array containing the cropped part of the image, or None
+        if no content (True values) is found.
+    """
+    # Find the indices of all True values
+    rows, cols = np.where(image)
+
+    # If there's no content, we can't do anything
+    if not rows.any():
+        return None
+
+    # 1. Find the center of the content's bounding box
+    y_center = (rows.min() + rows.max()) / 2
+    x_center = (cols.min() + cols.max()) / 2
+
+    # 2. Calculate the new box coordinates based on the center and desired size
+    # Note: These can be floats initially
+    new_top = y_center - height / 2
+    new_bottom = y_center + height / 2
+    new_left = x_center - width / 2
+    new_right = x_center + width / 2
+
+    # 3. Clip coordinates to ensure they are within image bounds
+    img_height, img_width = image.shape
+    final_top = max(0, int(new_top))
+    final_bottom = min(img_height, int(new_bottom))
+    final_left = max(0, int(new_left))
+    final_right = min(img_width, int(new_right))
+
+    # 4. Slice the image to get the cropped region
+    cropped_image = image[final_top:final_bottom, final_left:final_right]
+
+    return cropped_image
+```
+
+```{python}
+cropped_img = crop_to_fixed_size_box(current_img, 75, 75)
+```
+
+```{r}
+
+plt_labled_img_in_r(py_img_to_r_df_fn(as.data.frame(py$cropped_img)))
+```
+
+
+
+
+#### 4. Initial spline fitting (NE)

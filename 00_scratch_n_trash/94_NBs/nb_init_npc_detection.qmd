@@ -1,0 +1,18 @@
+---
+title: "Initial NPC Detection"
+author: "Jocelyn Tourtellotte"
+format: html
+---
+
+```{r}
+#| label: load-packages-r
+#| include: false
+library(tidyverse)
+```
+
+```{python}
+#| label: load-packages-py
+#| include: false
+
+```
+
