@@ -1,4 +1,0 @@
-tools.directory_to_dict
-
-processes experiment directory into a dictionary (stored as a json) for use in image processing
-
