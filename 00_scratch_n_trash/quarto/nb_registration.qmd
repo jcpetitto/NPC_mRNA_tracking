@@ -1,0 +1,55 @@
+---
+title: "Registration"
+author: "Jocelyn Tourtellotte"
+format:
+    html:
+        code-fold: true
+        # code-tools: true
+        code-overflow: wrap
+---
+
+```{r}
+#| label: load-packages-r
+#| include: false
+library(tidyverse)
+```
+
+```{r}
+#| label: load-reg-results-ne-subsets
+#| include: false
+reg_ne_subset_per25_df <- read_csv("./yeast_output/tracking_experiments/registration/reg_results_combined_ne_subset_25per.csv") %>% relocate(strain, .before=FoV_id) %>% relocate(c(date,batch), .after=strain) %>% relocate(aqsettings, .before=source_file)
+```
+
+```{r}
+ne_label_summary <- reg_ne_subset_per25_df %>% dplyr::select(FoV_id, ne_label) %>% unique(.) %>% group_by(FoV_id) %>% dplyr::summarise(ne_count = n())
+```
+
+The median number of NE detected per FoV is `{r} median(ne_label_summary$ne_count)`(IQR: `{r} IQR(ne_label_summary$ne_count)`)
+
+```{r}
+within_2std_fn <- function(containing_df, target_var, mean_val, std_val) {
+    containing_df %>% filter(between({{ target_var }}, {{mean_val}} - 2 * {{std_val}}, {{mean_val}} + 2 * {{std_val}}))
+}
+
+outside_2std_fn <- function(containing_df, target_var, mean_val, std_val) {
+    containing_df %>% filter(!between({{ target_var }}, {{mean_val}} - 2 * {{std_val}}, {{mean_val}} + 2 * {{std_val}}))
+}
+
+angle_ne_subset_not2std_df <- outside_2std_fn(reg_ne_subset_per25_df, angle, angle_std, angle_mean)
+scale_ne_subset_not2std_df <- outside_2std_fn(reg_ne_subset_per25_df, scale, scale_std, scale_mean)
+x_shift_ne_subset_not2std_df <- outside_2std_fn(reg_ne_subset_per25_df, x_shift, x_shift_std, x_shift_mean)
+y_shift_ne_subset_not2std_df <- outside_2std_fn(reg_ne_subset_per25_df, y_shift, y_shift_std, y_shift_mean)
+
+```
+
+```{r}
+angle_ne_subset_not2std_df <- angle_combined_ne_subset_df %>% filter(!between(angle, -2*angle_std + angle_mean, 2*angle_std + angle_mean))
+
+scale_ne_subset_not2std_df <- scale_combined_ne_subset_df %>% filter(!between(scale, -2*scale_std + scale_mean, 2*scale_std + scale_mean))
+
+x_shift_ne_subset_not2std_df <- x_shift_combined_ne_subset_df %>% filter(!between(x_shift, -2*x_shift_std + x_shift_mean, 2*x_shift_std + x_shift_mean))
+
+y_shift_ne_subset_not2std_df <- y_shift_combined_ne_subset_df %>% filter(!between(y_shift, -2*y_shift_std + y_shift_mean, 2*y_shift_std + y_shift_mean))
+
+ne_subset_not2std_df <- left_join(angle_ne_subset_not2std_df, scale_ne_subset_not2std_df, by=c("FoV_id", "ne_label")) %>% left_join(., x_shift_ne_subset_not2std_df, by=c("FoV_id", "ne_label")) %>% left_join(., y_shift_ne_subset_not2std_df, by=c("FoV_id", "ne_label"))
+# ```

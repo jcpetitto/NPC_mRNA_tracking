@@ -1,0 +1,171 @@
+---
+title: "Imaging Python Functionality by Example"
+format: html
+---
+
+```{r}
+library(reticulate)
+library(tidyverse)
+```
+
+```{python}
+# outside python libraries
+import pandas as pd
+import numpy as np
+from great_tables import GT, md, html
+from importlib import reload
+```
+
+```{python}
+# python pipeline related imports
+from yeast_pipeline import YeastPipeline
+import image_processor
+from image_processor import ImageProcessor 
+```
+
+# Configuration
+
+## Overall Pipeline
+
+The configuration is stored in a JSON file, `config_options.json`, as well as a python script file, `config.py`.
+
+The script is loaded when a YeastPipeline object is instantiated, while the file is loaded through a class method.
+
+```{python}
+#| cache: true
+
+pipeline = YeastPipeline()
+pipeline.load_config_file('config_options.json')
+```
+
+## Image Processor
+
+Configuration file and device information are retrieved from the overall `pipeline` and used to instantiate an ImageProcessor `instance`.
+
+```{python}
+img_proc = ImageProcessor(config_dict = pipeline.get_config(),
+                              device = pipeline.get_device(),
+                              )
+```
+
+```{python}
+#| label: tbl-FoV_dict
+
+FoV_dict_ex_gt = GT(pd.DataFrame(img_proc._FoV_collection_dict))
+FoV_dict_ex_gt
+```
+
+# Image Processing
+
+## Detector Responsivity Determination
+
+Making the detector responsivity determination based on the light and dark images.
+
+```{python}
+img_proc.determine_responsivity()
+```
+
+Preparing variables for import into R.
+
+```{python}
+drd_stats = img_proc._get_drd_stats()
+drd_meanvar = img_proc._get_drd_meanvar()
+drd_fits = drd_meanvar['fit']
+drd_meanvar = {key: drd_meanvar[key] for key in ['center','statistic','weights'] if key in drd_meanvar}
+poly_fit_values = np.polyval(drd_fits, drd_meanvar['center'])
+```
+
+```{r}
+## Plots for the mean / variance (not yet complete)
+# img_proc_meanvar_data <- data.frame(py$drd_meanvar)
+# img_proc_meanvar_data <- cbind(img_proc_meanvar_data, py$poly_fit_values)
+# img_proc_meanvar_data <- rename(img_proc_meanvar_data, poly_fit_values = `py$poly_fit_values`)
+# 
+# drd_meanvar_plot <- ggplot(data = img_proc_meanvar_data) +
+#     geom_point(mapping = aes( x = center, y = statistic), shape = 3, color = "blue") + 
+#     geom_smooth(mapping = aes(x = center, y = poly_fit_values), method = "lm", se = FALSE, color = "red")
+# 
+# drd_meanvar_plot
+```
+
+## Individual Fields of View (FoVs)
+
+### Registration
+
+```{python}
+#| label: image-registration
+#| include: false
+
+img_proc.register_images()
+
+registration_data = img_proc._get_reg_diff_mode1()
+# test_pd_df = pd.DataFrame.from_dict({k:v for d in registration_data for k,v in d.items()})
+```
+
+
+```{r}
+img_registration_data <- py$registration_data
+```
+
+```{r}
+unravel_registration_entry <- function(reg_entry){
+    print(reg_entry[['FoV_id']])
+    print(reg_entry[['reg_results_1']])
+    print(reg_entry[['reg_results_2']])
+    
+# NOTE: There is (most likely) a MUCH neater way of doing this by going throught the nested dictionary objects, and I need to figure it out, but there are more important goals to achieve to first
+    results_data <- tibble_row(FoV_id = reg_entry[['FoV_id']],
+                                 angle_1 = reg_entry[['reg_results_1']]['angle'],
+                                 tvec_1 = reg_entry[['reg_results_1']]['tvec'],
+                                 scale_1 = reg_entry[['reg_results_1']]['scale'],
+                                 angle_2 = reg_entry[['reg_results_2']]['angle'],
+                                 tvec_2 = reg_entry[['reg_results_2']]['tvec'],
+                                 scale_2 = reg_entry[['reg_results_2']]['scale'])
+    
+    return(results_data)
+}
+test_df <- bind_rows(lapply(img_registration_data, unravel_registration_entry))
+
+# test_df %>% unnest_longer(col=c(results_1, results_2)) %>% pivot_wider(names_from = c(results_1_id, results_2_id), values_from=c(results_1, results_2))
+```
+
+
+```{python}
+#| label: drift-calculation
+#| include: false
+
+img_proc.run_drift_correction()
+drift_data = img_proc._get_drift_correction()
+```
+
+
+```{python}
+#| include: false
+FoV_dict = img_proc._get_FoV_collection_dict()
+ne_init_fit_list = []
+for entry in FoV_dict:
+    init_ne_fit = \
+    detect_npc(
+        entry['FoV_collection_path'] + \
+        entry['imgs']['fn_track_npc'],
+        frame_range = frame_range,
+        NE_model = ne_trained_model,
+        device = self._current_device
+        )
+    ne_init_fit_list.append(
+        {'FoV_id': entry['FoV_id'],
+        'initial_fit': init_ne_fit
+        })
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+

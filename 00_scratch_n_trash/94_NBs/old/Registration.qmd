@@ -1,0 +1,125 @@
+---
+title: "Registration Results"
+format: html
+editor: visual
+---
+
+# Registration Results
+
+```{r}
+#| include: false
+library(tidyverse)
+library(jsonlite)
+```
+
+```{r}
+#| include: false
+# Define the path to your JSON file
+# ~/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/src_yeast_pipeline
+file_path <- "./yeast_json_output/tracking_experiments/reg_results_all_mRNA_tracking.json"
+
+# Read the JSON into a named list of data frames
+# Each element in the list will be named with its BMY* key
+named_list_of_fovs <- fromJSON(file_path, flatten = TRUE)
+
+# Use bind_rows to combine the list into a single dataframe
+# The `.id` argument creates a new column with the specified name ("FoV_Key")
+# and fills it with the names (the keys) from the input list.
+reg_dataframe <- bind_rows(named_list_of_fovs, .id = "experiment")
+reg_dataframe <- reg_dataframe %>% rename(rdiff_magnitude = rdiff_magnitude)
+# View the first few rows and the structure of your new dataframe
+# You will now see the "FoV_Key" column at the beginning
+```
+
+```{r}
+#| include: false
+# priceless regex with stringr tool: https://spannbaueradam.shinyapps.io/r_regex_tester/
+# adding leading zeros in R: https://www.spsanderson.com/steveondata/posts/2024-06-18/#introduction
+ 
+# parse date from experiment string; rearrange pieces into YYYYMMDD with added leading zeros where necessary
+grab_date <- function(some_str){
+    date_captured <- str_match(some_str, "((?<=_)\\d(?=_)|(?<=_)\\d\\d(?=_))_((?<=_)\\d\\d(?=_)|(?<=_)\\d(?=_))_((?<=_)\\d(?=_)|(?<=_)\\d\\d(?=_))" )
+    date_formatted <- paste0("20", date_captured[4], sprintf("%02s", date_captured[2]),sprintf("%02s", date_captured[3]))
+    return(date_formatted)
+}
+# test_string <- "reg_result_BMY820_BMY820_7_18_23_aqsettings1_batchB"
+# 
+# grab_date(test_string)
+
+reg_dataframe <- reg_dataframe %>%
+  mutate(
+    strain = str_extract(experiment, "(?<=BMY\\d{3}_)BMY\\d{3}"),
+    
+    date = map_chr(experiment, grab_date),
+
+    batch = str_extract(experiment, "(?<=batch)\\w"),
+    
+    aqsettings = str_extract(experiment, "(?<=aqsettings)\\w")
+    #aqsettings = if_else(str_detect(FoV_Key, "aqsettings"), 1, 0)
+  ) %>%
+    relocate(date, .before = FoV_id) %>%
+    relocate(strain, .before = date) %>%
+    relocate(batch, .before = date) %>%
+    relocate(aqsettings, .after = date)
+```
+
+```{r}
+#| include: false
+reg_dataframe <- reg_dataframe %>%
+  unnest_wider(col = where(is.list), names_sep = "_")
+```
+
+```{r}
+#| include: false
+reg_test_df <- reg_dataframe %>% select(strain, batch, aqsettings, date, FoV_id, starts_with('reg_results'), experiment)
+```
+
+```{r}
+#| echo: false
+rmarkdown::paged_table(reg_test_df)
+```
+
+```{r}
+reg_test_df <- reg_test_df %>%
+    mutate(tvec_1_diff = reg_results_1.tvec_1 - reg_results_2.tvec_1,
+           tvec_2_diff = reg_results_1.tvec_2 - reg_results_2.tvec_2,
+           r_diff_mag = sqrt(tvec_1_diff**2 + tvec_2_diff**2)
+    )
+```
+
+```{r}
+reg_test_sum_df <- reg_test_df %>%
+    group_by(experiment) %>%
+    summarise(tvec_1_diff_mean = mean(tvec_1_diff),
+              tvec_1_diff_median = median(tvec_1_diff),
+              tvec_1_diff_sd = sd(tvec_1_diff),
+              tvec_2_diff_median = median(tvec_2_diff),
+              tvec_2_diff_mean = mean(tvec_2_diff),
+              tvec_2_diff_sd = sd(tvec_2_diff),
+              r_diff_median = median(r_diff),
+              r_diff_mean = mean(r_diff),
+              r_diff_sd = sd(r_diff),
+              r_diff_prec = sqrt(tvec_1_diff_sd**2 + tvec_2_diff_sd**2)
+              )
+# reg_test_sum_df
+
+r_mean_lookup_vector <- reg_test_sum_df$r_diff_mean
+names(r_mean_lookup_vector) <- reg_test_sum_df$experiment
+
+r_diff_prec_lookup_vector <- reg_test_sum_df$r_diff_prec
+names(r_diff_prec_lookup_vector) <- reg_test_sum_df$experiment
+```
+
+```{r}
+reg_test_df <- reg_test_df %>%
+  mutate(
+    r_diff_norm = r_diff/r_mean_lookup_vector[experiment],
+    r_diff_2sigma = 2 * r_diff_prec_lookup_vector[experiment],
+    r_diff_norm_vs_2sigma = r_diff_norm >= r_diff_2sigma
+  )
+```
+
+```{r}
+#| echo: false
+rmarkdown::paged_table(reg_test_df %>% select(experiment, r_diff_norm, r_diff_2sigma, r_diff_norm_vs_2sigma))
+```

@@ -1,0 +1,92 @@
+# Experiment
+
+## Now:
+
+``` python
+[ 
+    {'FoV_id': '0190',
+       'FoV_collection_path': 'example_data/dual_strain_label/BMY1408/12_14_2023',
+       'imgs': {
+           'fn_reg_npc1':'FoV_0190/BF1red0190.tiff',
+           'fn_reg_rnp1':'FoV_0190/BF1green0190.tiff',
+           'fn_reg_npc2': 'FoV_0190/BF2red0190.tiff',
+           'fn_reg_rnp2': 'FoV_0190/BF2green0190.tiff',
+           'fn_track_rnp': 'FoV_0190/RNAgreen0190.tiff',
+           'fn_track_npc': 'FoV_0190/NEred0190.tiff'
+       }
+    },
+    {'FoV_id': '0191',
+     'FoV_collection_path': 'example_data/dual_strain_label/BMY1408/12_14_2023',
+     'imgs': {'fn_reg_npc1': 'FoV_0191/BF1red0191.tiff',
+              'fn_reg_rnp1': 'FoV_0191/BF1green0191.tiff',
+              'fn_reg_npc2': 'FoV_0191/BF2red0191.tiff',
+              'fn_reg_rnp2': 'FoV_0191/BF2green0191.tiff',
+              'fn_track_rnp': 'FoV_0191/RNAgreen0191.tiff',
+              'fn_track_npc': 'FoV_0191/NEred0191.tiff'}
+    }
+]
+```
+
+npc - red (ch1)
+
+rnp - green (ch2)
+
+``` python
+{
+    '0190':
+            {'FoV_id': '0190',
+            'FoV_collection_path': 'example_data/dual_strain_label/BMY1408/12_14_2023',
+            'imgs': {
+                       'fn_ch1_reg1':'FoV_0190/BF1green0190.tiff',
+                       'fn_ch2_reg1':'FoV_0190/BF1red0190.tiff',
+                       'fn_ch1_reg2': 'FoV_0190/BF2green0190.tiff',
+                       'fn_ch2_reg2': 'FoV_0190/BF2red0190.tiff',
+                       'fn_track_ch1': 'FoV_0190/RNAgreen0190.tiff',
+                       'fn_track_ch2': 'FoV_0190/NEred0190.tiff'
+                   }
+            },
+    '0191':
+            {'FoV_id': '0191',
+            'FoV_collection_path': 'example_data/dual_strain_label/BMY1408/12_14_2023',
+             'imgs': {
+                      'fn_ch1_reg1': 'FoV_0191/BF1green0191.tiff',
+                      'fn_ch2_reg1': 'FoV_0191/BF1red0191.tiff',
+                      'fn_ch1_reg2': 'FoV_0191/BF2green0191.tiff',
+                      'fn_ch2_reg2': 'FoV_0191/BF2red0191.tiff',
+                      'fn_track_ch1': 'FoV_0191/RNAgreen0191.tiff',
+                      'fn_track_ch2': 'FoV_0191/NEred0191.tiff'
+                    }
+            }
+}
+```
+
+FUTURE:
+
+In a config file, set the prefixes associated with each img definition, ie.
+
+This might be the main config file, but it IS for the parsing by folder via bash
+SO maybe not...??
+
+fn_ch1_reg1 -\> BF1red
+
+# Registration
+
+# Initial NE Fitting
+
+# Channels
+
+```         
+{
+    "channel": 1,
+    "type": "brightfield",
+    "color": "green"
+}
+```
+
+```         
+{
+    "brightfield": "BF",
+    "fluorescence": "FL",
+    "channel": "ch"
+}
+```
