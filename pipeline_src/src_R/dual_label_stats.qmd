@@ -1,0 +1,138 @@
+---
+title: "Dual Label: Registration (Draft)"
+format:
+    html:
+        # html-table-processing: none
+        embed-resources: true
+        code-fold: true
+        # code-tools: true
+        code-overflow: wrap
+execute:
+    enabled: true
+    cache: true
+knitr:
+    opts_chunk:
+        message: false
+---
+
+```{css}
+#| label: css-definitions
+#| include: false
+
+figure.quarto-float-tbl figcaption.quarto-float-caption-top{
+    text-align: left !important;
+}
+
+caption, .table-caption {
+    text-align: left !important;
+}
+
+figcaption {
+  text-align: left !important;
+}
+
+.summary-table {
+    font-size: 12px;        
+    border: 1px solid #ddd;
+    margin-bottom: 20px; 
+}
+
+.summary-table th {
+    background-color: #f2f2f2 !important;
+    font-weight: bold;
+    text-align: center;
+}
+
+.scrollable-cell {
+  height: 100px;         /* Set a fixed height for the cell */
+  width: 200px;          /* Set a fixed width */
+  overflow-y: auto;      /* Add a vertical scrollbar if content overflows */
+  display: block;        /* Necessary for height to work correctly */
+}
+
+.highlighter{
+    background-color:yellow;
+}
+```
+
+```{r}
+#| label: library-imports
+#| include: false
+library(jsonlite)
+library(tidyverse)
+library(tidyr)
+library(knitr)
+library(glue)
+# library(cowplot)
+library(kableExtra)
+library(patchwork)
+```
+
+```{r}
+#| label: knitr-options
+#| include: false
+options(knitr.kable.NA='')
+```
+
+```{r}
+#| label: directory-paths
+#| include: false
+src_r_dir <- "/Users/jctourtellotte/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/src_yeast_pipeline/src_R/"
+dual_label_path <- "/Users/jctourtellotte/UMass Medical School Dropbox/Jocelyn Tourtellotte/11_Grunwald_Shared_Projects_Folder/Lab_Jocelyn/07_Yeast/yeast_output/dual_label_experiments/"
+no_merge_reg_subdir <- "no_merge/registration/"
+merged_reg_subdir <- "merged/registration/"
+```
+
+```{r}
+#| label: sourcing scripts
+#| include: false
+# TODO: put file location root in a config
+source('./src_R/r_utility_fns.R')
+source('./src_R/experiment_key.R')
+```
+
+```{r}
+#| label: set-globals
+#| include: false
+PIXEL_TO_NM <- 128
+strains_to_include <- c("BMY1408", "BMY1409", "BMY1410")
+
+table_num <- 1
+```
+
+```{r}
+#| label: import-experiment-key
+#| include: false
+all_experiment_key <- read_csv(paste0(dual_label_path, "dual_label_exper_table.csv")) %>% dplyr::filter(strain %in% strains_to_include)
+all_experiment_key_n <- all_experiment_key %>% group_by(strain, date, addl_info) %>% summarise(FoV_count = n()) %>% ungroup()
+
+all_experiment_key <- left_join(all_experiment_key, all_experiment_key_n) %>% relocate(FoV_count, .after = addl_info)
+```
+
+```{r}
+#| label: tbl-experiment-key
+#| echo: false
+nested_key <- all_experiment_key %>%
+    nest(FoV_id = FoV_id)
+nested_key %>% kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "condensed"))
+```
+
+```{r}
+#| label: var-definitions
+#| echo: false
+def_df <- tibble(
+    word_var = c("Strain", "Experiment", "Segmentation Method", "Mode", "Granularity"),
+    desc_var = c("<ul><li>BMY1408</li><li>BMY1409</li><li>BMY1410</li></ul>",
+    "<div style=\"padding-left: 30px;\">Some strains were imaged on multiple days or in multiple batches on a single day. Each unique strain/day/batch combination constitutes an `experiment`.</div>",
+    "<ul><li>longest segment</li><li>merged segments</li></ul>",
+    "<ul><li>1 (Brightfield before fluorescence microscopy)</li><li>2 (Brightfield after fluorescence microscopy)</li></ul>",
+    "<ul><li>Whole FoV</li><li>merged segments</li><li>\" \" subset into 25 frame slices, calculates the registration vector per frame range for each slice with respect to the mean channel 1 image and the mean channel 2 image for the slice</li></ul>")    
+)
+
+    kbl(x = def_df, escape = FALSE, col.names = NULL) %>%
+    kable_styling(bootstrap_options = c("bordered", "condensed"))
+```
+
+On the HPC: registration data stored in 1 JSON per each of `{r} dplyr::n_distinct(all_experiment_key)` experiment (nested) are aggregated by mode and segmentation method, then exported into a 3 CSV files total (flat files), 1 per level of granularity.
+

@@ -1,0 +1,43 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+jupyter: python3
+---
+
+```{python}
+# import external packages
+import numpy as np
+import json
+```
+
+```{python}
+# import supporting pipeline classes (if any)
+from utils.img_registration import image_registration, compute_drift
+```
+
+```{python}
+def load_dict_list_from_json(dict_path = None):
+        if dict_path is None:
+    # Set default values
+            print("No data dictionary file path was provided. Without such a document, the program is unable to proceed.")
+        else:
+            try:
+                with open(dict_path, 'r') as dict_file:
+                    new_dict = json.load(dict_file)
+                    return new_dict
+            except FileNotFoundError:
+                print(f"Error: JSON configuration file not found at '{dict_path}'.")
+            except json.JSONDecodeError:
+                print(f"Error: Could not decode JSON from '{dict_path}'. Check the file format.")
+```
+
+```{python}
+FoV_dict_list_BMY823_20230725_1_C = load_dict_list_from_json("data/BMY823_BMY823_7_25_23_aqsettings1_batchC.json")
+```
+
+```{python}
+reg_dict_list_BMY823_20230725_1_C = []
+for FoV_dict in FoV_dict_list_BMY823_20230725_1_C:
+    reg_dict_list_BMY823_20230725_1_C.append(image_registration(FoV_dict))
+```

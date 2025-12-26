@@ -1,0 +1,46 @@
+---
+title: "Yeast Imaging Pipeline"
+---
+
+```{python}
+from importlib import reload
+```
+
+```{python}
+from yeast_pipeline import YeastPipeline
+from image_processor import ImageProcessor 
+```
+
+```{python}
+pipeline = YeastPipeline()
+pipeline.load_config_file('config_options.json')
+```
+
+```{python}
+img_proc = ImageProcessor(config_dict = pipeline.get_config(),
+                              device = pipeline.get_device(),
+                              )
+    
+```
+
+detector responsivity determination
+
+```{python}
+img_proc.img_processor_responsivity()
+```
+
+```{python}
+img_proc.register_images()
+```
+
+```{python}
+img_proc.run_drift_correction()
+```
+
+```{python}
+img_proc.run_drift_correction()
+```
+
+```{python}
+img_proc.run_ne_detection()
+```
