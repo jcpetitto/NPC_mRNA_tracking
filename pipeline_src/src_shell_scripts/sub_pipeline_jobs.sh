@@ -1,13 +1,14 @@
 #!/bin/bash
 echo "Initializing job submission..."
-# --- 1. Define All Paths and Variables at the Top ---
-# CONDA_BASE_PATH="/pi/david.grunwald-umw/miniconda3"
+# vars from CL args
 CONFIG_FILE="$1"
 RERUN_FLAG="$2"
 
-# Get the directory where THIS script is located
-SCRIPT_DIR=/home/jocelyn.tourtellotte-umw/src_yeast_pipeline
+# directory where THIS script is located
+SCRIPT_DIR="your/home/src_yeast_pipeline"
 SHELL_DIR="$SCRIPT_DIR/src_shell_scripts"
+
+PATH_TO_CONDA="path/to/miniconda3/etc/profile.d/conda.sh"
 
 # --- 2. Check Command-Line Argument ---
 if [ -z "$CONFIG_FILE" ]; then
@@ -20,13 +21,14 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+# checking paths for debugging job submission if necessary
 # echo "Using Conda installation at: $CONDA_BASE_PATH"
-echo "Using config file: $CONFIG_FILE"
+# echo "Using config file: $CONFIG_FILE"
 
-# --- 3. Activate Environment and Discover Jobs ---
+# activate conda environment so the number of jobs can be
+# determined by a python script based on the config file
 echo "Activating Conda environment to discover jobs..."
-# source "$CONDA_BASE_PATH/etc/profile.d/conda.sh"
-source /pi/david.grunwald-umw/miniconda3/etc/profile.d/conda.sh
+source $PATH_TO_CONDA
 conda activate pyr_yeast_env
 
 PYTHON_SCRIPT="$SCRIPT_DIR/src_python/gather_experiments.py"
@@ -37,7 +39,7 @@ conda deactivate
 
 echo "Discovery complete."
 
-# --- 4. Check Discovery Result ---
+# checks the number of experiments found (becomes # of jobs in array)
 if ! [[ "$NUM_JOBS" =~ ^[0-9]+$ ]]; then
     echo "Error: gather_experiments.py did not return a valid number. Aborting."
     echo "--- Captured Output ---"
@@ -46,7 +48,7 @@ if ! [[ "$NUM_JOBS" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-# --- 5. Submit the Job Array ---
+# submit job array
 if [ "$NUM_JOBS" -gt 0 ]; then
     echo "Found $NUM_JOBS experiments. Submitting job array..."
     
@@ -55,7 +57,8 @@ if [ "$NUM_JOBS" -gt 0 ]; then
     
     echo "DEBUG: Submitting job directly (without '<' redirection)."
 
-    # set the configuration file path as an environmental variable that the worker script can access
+    # set the configuration file path as an environmental variable
+    #   that the worker script can access
     bsub -J "fov_proc[1-$NUM_JOBS]" -env "CONFIG_FILE=$CONFIG_FILE,RERUN_FLAG=$RERUN_FLAG" "$WORKER_SCRIPT"
     
     echo "Job array submitted."

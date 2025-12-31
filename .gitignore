@@ -1,27 +1,38 @@
-# Byte-compiled / optimized / DLL files
+# Python, R, etc.
 __pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
 
-# Unit test / coverage reports
-.pytest_cache/
+.quarto/
 
-# Sphinx documentation
-docs/_build/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# R
 *.Rproj
-*.Rdata
+.RData
+.Rhistory
 
-# system affiliated files
+.env
+*.yml
+
+*.code-workspace
+.vscode/
+
+# Data files (if they're huge)
+*.tif
+*.tiff
+example_data/
+*.zip
+
+# Output/results
+local_yeast_output/
+output/
+figures/
+reports/
+reports_for_boss/
+98_saved_console_output/
+97_plots_from_testing/
+00_stratch_n_trash/
+*.pdf
+*.png
+
+# Mac stuff
 .DS_Store
-
-# Directories for testing data
-# Data will be available from a data repository
-/example_data/
-/example_data/*

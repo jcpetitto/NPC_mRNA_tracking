@@ -2,20 +2,19 @@
 
 #BSUB -q gpu
 #BSUB -n 4
-#BSUB -W 24:00
+#BSUB -W 48:00
 #BSUB -M 32000
-#BSUB -o "/home/jocelyn.tourtellotte-umw/yeast_output/logs/output_%J_%I.log"
-#BSUB -e "/home/jocelyn.tourtellotte-umw/yeast_output/logs/error_%J_%I.log"
+#BSUB -o "your/home/logs/output_%J_%I.log"
+#BSUB -e "your/home/logs/error_%J_%I.log"
 
 # Create the log directory
-mkdir -p "/home/jocelyn.tourtellotte-umw/yeast_output/logs"
+mkdir -p "your/home/logs"
 
-HOME_DIR="/home/jocelyn.tourtellotte-umw"
-DATA_DIR="/pi/david.grunwald-umw"
-# SIF_PATH="${HOME_DIR}/yeast.sif"
-SIF_PATH="/home/jocelyn.tourtellotte-umw/yeastainer.sif"
-# PYTHON_SCRIPT="${HOME_DIR}/src_yeast_pipeline/src_python/main_cluster_dual_label.py"
-PYTHON_SCRIPT="/home/jocelyn.tourtellotte-umw/src_yeast_pipeline/src_python/main_cluster.py"
+HOME_DIR="your/home/"
+DATA_DIR="data/storage/"
+SIF_PATH="your/home/yeastainer.sif"
+SCRIPT_DIR="your/home/src_yeast_pipeline"
+PYTHON_SCRIPT="$SCRIPT_DIR/src_python/main_cluster.py"
 
 echo "Starting job $LSB_JOBINDEX on host $HOSTNAME"
 echo "Date: $(date)"
