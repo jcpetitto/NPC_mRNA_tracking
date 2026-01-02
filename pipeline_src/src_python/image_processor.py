@@ -99,20 +99,20 @@ class ImageProcessor:
         #   uses bright (gain) and dark (offset) image pair
         #   return calibration statistics as well as mean/variance
         cfg = self._get_cfg()
-        imaging_directory = cfg.get("directories").get("imaging root")
+        camera_dir = cfg.get("directories").get("camera root")
         responsivity_cfg = cfg['responsivity']
-        responsivity_subdir = responsivity_cfg['input subdirectory']
+        
 
         ch1_drd_stats, ch1_meanvar_plt_stats = \
                 detector_responsivity_determ(
-                    os.path.join(imaging_directory, responsivity_subdir, responsivity_cfg['ch1']['bright']),
-                    os.path.join(imaging_directory, responsivity_subdir, responsivity_cfg['ch1']['dark'])
+                    os.path.join(camera_dir, responsivity_cfg['ch1']['bright']),
+                    os.path.join(camera_dir, responsivity_cfg['ch1']['dark'])
                     )
         
         ch2_drd_stats, ch2_meanvar_plt_stats = \
                 detector_responsivity_determ(
-                    os.path.join(imaging_directory, responsivity_subdir, responsivity_cfg['ch2']['bright']),
-                    os.path.join(imaging_directory, responsivity_subdir, responsivity_cfg['ch2']['dark'])
+                    os.path.join(camera_dir, responsivity_cfg['ch2']['bright']),
+                    os.path.join(camera_dir, responsivity_cfg['ch2']['dark'])
                     )
         drd_stats = {   'ch1': ch1_drd_stats,
                         'ch2': ch2_drd_stats}
@@ -535,7 +535,9 @@ class ImageProcessor:
         """
         Takes refined spline segments and connects them
         with Bezier bridges to create whole, closed membranes
-        using the logic in spline_bridging.py.
+        using the logic in spline_bridging.py
+        AND
+        The per-nucleus precision (sigma) calculated during responsitivity/stability analysis to determine how much to trust/trim the endpoints.
         """
         logger.info("--- Running Bezier Bridging ---")
         is_dual_label = self._get_cfg().get('ne_dual_label', False)
@@ -545,63 +547,21 @@ class ImageProcessor:
         sigma_map = self._get_sigma_map()
 
         if not sigma_map:
-            logger.warning("No precision map found! (Did you run Stability Analysis?) Using defaults.")
+            logger.warning("No precision map found! (Did you run Stability Analysis?)")
+            logger.warning("Bridging will likely fallback to default hard-coded trimming thresholds.")
+        else:
+            logger.info(f"Loaded precision values for {sum(len(v) for v in sigma_map.values())} nuclei.")
 
-        # --- CONFIG: Trim Calculation Mode ---
-        # Options: 'ne' (local precision), 'fov' (global average), 'compare' (log both)
-        trim_mode = ne_fit_config.get('trim_calculation_mode', 'ne')
-        logger.info(f"Precision Trimming Mode: {trim_mode.upper()}")
-
-        # --- BUILD REG PREC MAP ---
-        reg_mode1_data = self.get_registration_results(reg_mode=1)
-        uncertainty_map = {}
-
-        if reg_mode1_data:
-            for fov_id, fov_reg_data in reg_mode1_data.items():
-                uncertainty_map[fov_id] = {}
-                
-                # FoV-level Fallback
-                if 'ch_reg_prec' in fov_reg_data:
-                    uncertainty_map[fov_id]['sigma_reg'] = fov_reg_data['ch_reg_prec']
-# !!!: make sure this prioritizes per-label AND global is a fallback AND there is a config flag to change this
-                # Per-Label Stats (Prefered)
-                # Iterate through NE label specific reg data. 
-                # If the value is a dict and has 'slice_', it's an NE label with registration slices.
-                for key, val in fov_reg_data.items():
-                    if isinstance(val, dict) and 'shift_vector' in val:
-                        # Found an NE label entry. 
-                        # Now check for slices to calculate sigma.
-                        slice_shifts = []
-                        for subkey, subval in val.items():
-                            if subkey.startswith('slice_') and 'shift_vector' in subval:
-                                slice_shifts.append(subval['shift_vector'])
-                        
-                        if len(slice_shifts) > 1:
-                            # Calculate standard deviation of the shift vectors
-                            # slice_shifts is shape (N, 2) -> [[y1, x1], [y2, x2], ...]
-                            shifts_arr = np.array(slice_shifts)
-                            
-                            # std dev along axis 0 (across slices)
-                            std_y = np.std(shifts_arr[:, 0])
-                            std_x = np.std(shifts_arr[:, 1])
-                            
-                            # Combine into radial precision magnitude
-                            sigma_reg = np.sqrt(std_y**2 + std_x**2)
-                            
-                            uncertainty_map[fov_id][key] = {'sigma_reg': sigma_reg}
-                            # logger.debug(f"  {fov_id}/{key}: Calculated sigma_reg = {sigma_reg:.4f} px from {len(slice_shifts)} slices")
-                        else:
-                            # Fallback if slices missing or insufficient
-                            # Use the global FoV sigma we set earlier
-                            uncertainty_map[fov_id][key] = {'sigma_reg': uncertainty_map[fov_id]['sigma_reg']}
-
-        logger.info(f"Uncertainty map built for {len(uncertainty_map)} FoVs.")
+        # # --- CONFIG: Trim Calculation Mode ---
+        # # Options: 'ne' (local precision), 'fov' (global average), 'compare' (log both)
+        # trim_mode = ne_fit_config.get('trim_calculation_mode', 'ne')
+        # logger.info(f"Precision Trimming Mode: {trim_mode.upper()}")
 
         # Channel 1 (Always run)
         ch1_refined = self._get_ch1_refined_bsplines()
         if ch1_refined:
             logger.info("Bridging Channel 1...")
-            ch1_bridged_data = bridge_refined_splines(ch1_refined, ne_fit_config)
+            ch1_bridged_data = bridge_refined_splines(ch1_refined, ne_fit_config, sigma_map)
             self._set_ch1_bridged_splines(ch1_bridged_data)
         else:
             logger.warning("No Ch1 refined splines found to bridge.")
@@ -612,7 +572,7 @@ class ImageProcessor:
             ch2_refined = self._get_ch2_refined_bsplines()
             if ch2_refined:
                 logger.info("Bridging Channel 2...")
-                ch2_bridged_data = bridge_refined_splines(ch2_refined, ne_fit_config)
+                ch2_bridged_data = bridge_refined_splines(ch2_refined, ne_fit_config, sigma_map)
                 self._set_ch2_bridged_splines(ch2_bridged_data)
             else:
                 logger.warning("Dual label mode, but no Ch2 refined splines found to bridge.")

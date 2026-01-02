@@ -1,5 +1,6 @@
 import sys
 import logging
+
 from pathlib import Path
 from datetime import datetime
 import traceback
@@ -304,19 +305,19 @@ def run_pipeline(job_index: int, config_path: str, rerun: bool = False):
         if not chkpt_filter.exists() or rerun:
             run_filtering(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
             save_checkpoint(img_proc, chkpt_filter)
-        # if not chkpt_refine.exists() or rerun:
-        #     run_refinement(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
-        #     save_checkpoint(img_proc, chkpt_refine)
-        # if img_proc_cfg_dict.get('ne_fit', {}).get('run_bezier_bridging', False):
-        #     if not chkpt_bridge.exists() or rerun:
-        #         run_bridging(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
-        #         save_checkpoint(img_proc, chkpt_bridge)
-        # if pipeline_mode == "dual_label":
-        #     run_dual_label(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
-        # elif pipeline_mode == "mrna_tracking":
-        #     logger.warning("mRNA tracking placeholder not implemented.")
-        # else:
-        #     logger.error(f"Unknown pipeline_mode: '{pipeline_mode}'.")
+        if not chkpt_refine.exists() or rerun:
+            run_refinement(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
+            save_checkpoint(img_proc, chkpt_refine)
+        if img_proc_cfg_dict.get('ne_fit', {}).get('run_bezier_bridging', False):
+            if not chkpt_bridge.exists() or rerun:
+                run_bridging(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
+                save_checkpoint(img_proc, chkpt_bridge)
+        if pipeline_mode == "dual_label":
+            run_dual_label(img_proc, img_proc_cfg_dict, output_base_dir, experiment_name)
+        elif pipeline_mode == "mrna_tracking":
+            logger.warning("mRNA tracking placeholder not implemented.")
+        else:
+            logger.error(f"Unknown pipeline_mode: '{pipeline_mode}'.")
 
         run_visualization(img_proc_cfg_dict, output_base_dir, experiment_name)
     except Exception as e:
@@ -325,4 +326,4 @@ def run_pipeline(job_index: int, config_path: str, rerun: bool = False):
 
 if __name__ == "__main__":
     # Local defaults for testing
-    run_pipeline(job_index=1, config_path="config_local_dual.json", rerun=False)
+    run_pipeline(job_index=1, config_path="config_local.json", rerun=False)

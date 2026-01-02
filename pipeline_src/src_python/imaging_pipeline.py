@@ -47,8 +47,8 @@ class ImagingPipeline:
     
     def load_experimental_data(self):
         pipeline_general_config = self.get_config().get("pipe globals")
-        imaging_directory = pipeline_general_config.get("directories").get("imaging root")
-        experiment_directory = os.path.join(imaging_directory, pipeline_general_config.get("directories").get("experiment subdirectory"))
+        imaging_directory = pipeline_general_config.get("directories", {}).get("imaging root")
+        experiment_directory = os.path.join(imaging_directory)
         print(f'Creating dictionaries from directory of imaging experiments: {experiment_directory}')
         # confirms the directory contains at least one folder re: the strain names passed to it
         strains_to_process = confirm_strains(experiment_directory, pipeline_general_config.get("strains"))
