@@ -9,7 +9,7 @@ from scipy.interpolate import make_splprep, splprep, BSpline
 from scipy.integrate import quad
 from scipy.optimize import brentq # Root finding to map Length -> t
 
-from tools.geom_tools import build_curve_bridge, get_spline_arc_length
+from tools.geom_tools import build_curve_bridge, get_spline_arc_length, calculate_tangent_angle_changes
 from tools.utility_functions import sample_bspline
 
 
@@ -17,47 +17,52 @@ logger = logging.getLogger(__name__)
 
 def validate_bridge_curvature(bridge_spline, max_angle_change_deg=1.0, n_check_points=50):
     """
-    Validate that a bridge spline doesn't have extreme curvature using the
-    same method as refinement: checking tangent angle changes.
+    Validate that a bridge spline satisfies physical curvature constraints.
     
-    Uses the nuclear envelope physics constraint: at ~20nm sampling, expected
-    angular deviation is ~0.3°. We use 1° threshold (3× safety margin).
-    
-    Args:
-        bridge_spline: BSpline object for the bridge
-        max_angle_change_deg: Maximum allowed angle change between consecutive points (default 1.0°)
-        n_check_points: Number of points to check along bridge
+    Parameters
+    ----------
+    bridge_spline : scipy.interpolate.BSpline
+        The B-spline object representing the potential bridge.
+    max_angle_change_deg : float, optional
+        Maximum allowed change in tangent angle (degrees). Default is 1.0.
+    n_check_points : int, optional
+        Number of points to sample along the bridge. Default is 50.
         
-    Returns:
-        (is_valid, max_angle_found): Tuple of (bool, float in degrees)
+    Returns
+    -------
+    is_valid : bool
+        True if the bridge is physically plausible.
+    max_angle_found : float
+        The maximum angle change detected (degrees).
+        
+    References
+    ----------
+    See tools.geom_tools.calculate_tangent_angle_changes for physical justification and citations.
     """
-    u_values = np.linspace(0, 1, n_check_points)
     
-    # Get points and tangents along bridge
+    # Sample points along bridge
+    u_values = np.linspace(0, 1, n_check_points)
     points = np.array([bridge_spline(u) for u in u_values]).T  # (2, N)
     
-    # Calculate tangent vectors via derivatives
-    derivs = np.zeros_like(points)
-    derivs[:, 1:-1] = (points[:, 2:] - points[:, :-2]) / 2.0
-    derivs[:, 0] = points[:, 1] - points[:, 0]
-    derivs[:, -1] = points[:, -1] - points[:, -2]
+    # Calculate angle changes
+    try:
+        angle_changes_deg, _ = calculate_tangent_angle_changes(
+            points=points,
+            max_angle_change_deg=max_angle_change_deg
+        )
+    except Exception as e:
+        # If calculation fails (e.g., degenerate spline), reject
+        return False, np.inf
     
-    # Calculate tangent angles
-    angles = np.arctan2(derivs[1, :], derivs[0, :])
-    
-    # Angle differences (normalized to [-π, π])
-    angle_diffs = np.diff(angles)
-    angle_diffs = (angle_diffs + np.pi) % (2 * np.pi) - np.pi
-    angle_changes_deg = np.abs(np.rad2deg(angle_diffs))
-    
-    # Check if any angle change exceeds threshold
+    # Get maximum angle change
     max_angle = np.max(angle_changes_deg) if len(angle_changes_deg) > 0 else 0.0
     
+    # Check for numerical issues
     if np.isnan(max_angle) or np.isinf(max_angle):
         return False, np.inf
     
     is_valid = max_angle <= max_angle_change_deg
-
+    
     return is_valid, max_angle
 
 def validate_segment_orientation(spline_obj, nucleus_center, threshold=0.7):
@@ -198,15 +203,25 @@ def precise_trim_spline(spline_obj, trim_length_pixels):
 
 def bridge_refined_splines(refined_splines_dict, config_dict, reg_prec_map = None):
     """
-    Connects disjoint refined spline segments for each NE label into a 
-    single, continuous, periodic spline.
+    This function attempts to close gaps between segments using Bezier curves,
+    applying geometric filters (orientation, gap size) and physics-based filters
+    (curvature) to ensure validity.
     
-    Args:
-        refined_splines_dict (dict): {fov_id: {ne_label: {seg_label: BSpline_object}}}
-        config_dict (dict): The 'ne_fit' section of the config.
+    Parameters
+    ----------
+    refined_splines_dict : dict
+        Dictionary of refined segments keyed by FoV and NE label.
+        {fov_id: {ne_label: {seg_label: BSpline_object}}}
+    config_dict : dict
+        The 'ne_fit' configuration dictionary.
+    reg_prec_map : dict, optional
+        Optional map of registration precision (sigma) per nucleus, used for trimming.
 
-    Returns:
-        bridged_splines_output: Dict with structure:
+    Returns
+    -------
+    dict
+        A dictionary of full periodic splines and their constituent segments.
+        Structure:
             {fov_id: {ne_label: {
                 'data_segments': [BSpline, ...],
                 'bridge_segments': [BSpline, ...],
@@ -230,7 +245,7 @@ def bridge_refined_splines(refined_splines_dict, config_dict, reg_prec_map = Non
     # Same as refinement threshold (based on NE biophysics)
     max_angle_change_deg = ne_fit_cfg.get('max_curvature_angle_deg', 1.0)
     # Minimum gap distance (pixels) to bridge
-    min_gap_threshold = ne_fit_cfg.get('bridge_min_gap_pixels', 1.0)
+    min_gap_threshold = ne_fit_cfg.get('bridge_min_gap_pixels', 0.5)
     # tangent orientation
     # If dot product > 0.6, the line is pointing too much at the center.
     orientation_threshold = 0.6
@@ -351,29 +366,6 @@ def bridge_refined_splines(refined_splines_dict, config_dict, reg_prec_map = Non
                     tan_start = seg_spline.derivative(1)(0.0)
                     
                     gap_distance = np.linalg.norm(p_start - p_end)
-                    
-                    if gap_distance < min_gap_threshold:
-                        logger.info(f"{fov_id}/{ne_label}: Gap too small ({gap_distance:.2f}px), treating as already closed")
-                        # Just use the data segment as periodic
-                        seg_points, _ = sample_bspline(seg_spline, sampling_density)
-                        seg_points = np.array(seg_points)
-                        if seg_points.ndim == 3:
-                            seg_points = seg_points.squeeze()
-                        if seg_points.shape[0] == 2 and seg_points.shape[1] > 2:
-                            seg_points = seg_points.T
-                        
-                        periodic_spline = fit_parametric_spline(seg_points, smoothing=final_smoothing, periodic=True)
-                        
-                        bridged_splines_output[fov_id][ne_label] = {
-                            'data_segments': [seg_spline],
-                            'bridge_segments': [],
-                            'full_periodic_spline': periodic_spline,
-                            'u_ranges': {
-                                'data': [(0.0, 1.0)],
-                                'bridge': []
-                            }
-                        }
-                        continue
                     
                     bridge_points = build_curve_bridge(p_end, p_start, tan_end, tan_start)
                     bridge_spline = fit_parametric_spline(bridge_points, smoothing=0, periodic=False)

@@ -1,3 +1,15 @@
+"""
+Local Execution Script for Imaging Pipeline
+===========================================
+
+A variant of the main cluster script designed for local development and debugging.
+It performs the same orchestration tasks (Responsivity, Detection, Registration,
+Refinement, etc.) but defaults to hardcoded arguments or simplified inputs
+typical of a local run (e.g., ``job_index=1``).
+
+It mimics the cluster environment's checkpointing behavior to allow for testing
+of restart logic on a local machine.
+"""
 import sys
 import logging
 
@@ -18,6 +30,19 @@ from utils.report_visualizer import ReportVisualizer
 # --- Helper Functions for Checkpointing ---
 
 def load_checkpoint(path: Path):
+    """
+    Loads a pickled object from a checkpoint file.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        The file path to the pickle checkpoint.
+
+    Returns
+    -------
+    object or None
+        The loaded object if the file exists and is valid; otherwise None.
+    """
     if not path.exists():
         return None
     try:
@@ -28,6 +53,16 @@ def load_checkpoint(path: Path):
         return None
 
 def save_checkpoint(obj: object, path: Path):
+    """
+    Saves an object to a pickle file using the highest protocol.
+
+    Parameters
+    ----------
+    obj : object
+        The Python object to pickle (typically an ``ImageProcessor`` instance).
+    path : pathlib.Path
+        The destination file path. Parent directories are created if they do not exist.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'wb') as f:
         pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -37,6 +72,22 @@ def save_checkpoint(obj: object, path: Path):
 #but that does not account for different cameras being used for different
 # experimentsltiple cameras 
 def run_responsivity(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Executes the Detector Responsivity Calibration step.
+
+    Calculates gain, offset, and read noise for the detector channels and saves the calibration statistics to disk.
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The 'image processor' sub-dictionary from the configuration.
+    out_base : pathlib.Path
+        The root output directory for the experiment.
+    exp_name : str
+        The unique name of the current experiment.
+    """
     logger.info("--- Running Detector Responsivity Calibration ---")
     resp_subfolder = cfg_dict['responsivity']['output subdirectory']
     output_dir = out_base / resp_subfolder
@@ -61,6 +112,20 @@ def run_responsivity(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, e
     logger.info(f"  Read noise: {cal_stats['ch2']['dk_noise']:.4f} photons")
 
 def run_initial_ne(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Executes the Initial Nuclear Envelope (NE) Detection step (via labeled Nups).
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The configuration dictionary.
+    out_base : pathlib.Path
+        The root output directory.
+    exp_name : str
+        The experiment name.
+    """
     logger.info("--- Running Initial NE Detection ---")
     img_proc.run_init_ne_detection()
     init_fit_subfolder = cfg_dict['ne_fit']['initial']['output subdirectory']
@@ -72,6 +137,20 @@ def run_initial_ne(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp
     save_output(img_proc._get_ch2_init_bsplines(), output_dir, "ch2_bsplines", exp_name, is_pickle=True)
 
 def run_registration(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Executes the Image Registration step.
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The configuration dictionary.
+    out_base : pathlib.Path
+        The root output directory.
+    exp_name : str
+        The experiment name.
+    """
     logger.info("--- Running Image Registration ---")
     reg_subfolder = cfg_dict['registration']['output subdirectory']
     output_dir = out_base / reg_subfolder
@@ -82,6 +161,20 @@ def run_registration(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, e
     save_output(img_proc.get_registration_results(reg_mode=2), output_dir, "reg_results_mode2", exp_name)
 
 def run_filtering(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Runs the Registration Stability Analysis, saves reports, and filters the ImageProcessor's NE pair map.
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The configuration dictionary.
+    out_base : pathlib.Path
+        The root output directory.
+    exp_name : str
+        The experiment name.
+    """
     logger.info("--- Running Registration Stability Analysis & Filtering ---")
     reg_subfolder = cfg_dict['registration']['output subdirectory']
     output_dir = out_base / reg_subfolder
@@ -137,6 +230,23 @@ def run_filtering(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_
     logger.info("--- Registration Analysis & Filtering Complete ---")
 
 def run_refinement(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Tells the ImageProcessor to run the robust, restartable spline refinement step.
+    
+    This function is responsible for creating the paths, and the
+    ImageProcessor handles the loop and partial file I/O.
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The configuration dictionary.
+    out_base : pathlib.Path
+        The root output directory.
+    exp_name : str
+        The experiment name.
+    """
     logger.info("--- Preparing for Spline Refinement ---")
     refine_subfolder = cfg_dict['ne_fit']['refinement']['output subdirectory']
     output_dir = out_base / refine_subfolder
@@ -152,6 +262,21 @@ def run_refinement(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp
     logger.info("--- Spline Refinement Step Complete ---")
 
 def run_bridging(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Runs the (optional) Bezier bridging step to connect refined spline segments
+    into whole, closed membranes.
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The configuration dictionary.
+    out_base : pathlib.Path
+        The root output directory.
+    exp_name : str
+        The experiment name.
+    """
     logger.info("--- Running Bezier Spline Bridging ---")
     refine_subfolder = cfg_dict['ne_fit']['refinement']['output subdirectory']
     output_dir = out_base / refine_subfolder
@@ -162,6 +287,19 @@ def run_bridging(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_n
         save_output(img_proc._get_ch2_bridged_splines(), output_dir, "bridged_splines_ch2", exp_name, is_pickle=True)
 
 def run_dual_label(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """Runs the Dual Label Difference Calculations step.
+
+    Parameters
+    ----------
+    img_proc : ImageProcessor
+        The active image processing object.
+    cfg_dict : dict
+        The configuration dictionary.
+    out_base : pathlib.Path
+        The root output directory.
+    exp_name : str
+        The experiment name.
+    """
     logger.info("--- Running Dual Label Difference Calculations ---")
     dual_dist_subfolder = cfg_dict['dual_label']['output subdirectory']
     output_dir = out_base / dual_dist_subfolder
@@ -179,6 +317,36 @@ def run_dual_label(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp
         logger.error(f"ERROR in run_dual_label: {e}")
         logger.error(traceback.format_exc())
         raise
+
+def run_mrna_tracking(img_proc: ImageProcessor, cfg_dict: dict, out_base: Path, exp_name: str):
+    """
+    Runs the mRNA Particle Tracking step.
+    
+    *** PLACEHOLDER: You must implement: ***
+    1.  `img_proc.run_mrna_tracking()` in ImageProcessor
+    2.  `img_proc.get_mrna_tracking_results()` in ImageProcessor
+    3.  `['mrna_tracking']` section in your config file
+    """
+    logger.info("--- Running mRNA Particle Tracking ---")
+    
+    # 1. Run the new tracking method
+    # This method will need to use the refined splines
+    # (e.g., img_proc._get_ch1_refined_bsplines()) as input.
+    # img_proc.run_mrna_tracking() 
+    logger.warning("run_mrna_tracking() is a placeholder. Please implement in ImageProcessor.")
+
+    # 2. Get the new output subdirectory
+    # try:
+    #     mrna_subfolder = cfg_dict['mrna_tracking']['output subdirectory']
+    #     output_dir = out_base / mrna_subfolder
+    #     output_dir.mkdir(parents=True, exist_ok=True)
+    # except KeyError:
+    #     logger.error("Config file is missing ['mrna_tracking']['output subdirectory']")
+    #     return
+
+    # 3. Save the new results
+    # save_output(img_proc.get_mrna_tracking_results(), output_dir, "mrna_track_results", exp_name)
+    logger.warning("Skipping save for mRNA tracking (placeholder).")
 
 def print_global_stats_to_log(title, stats_dict):
     print(f"--- {title} (N={stats_dict['n']}) ---")
@@ -200,8 +368,8 @@ def run_visualization(cfg_dict: dict, out_base: Path, exp_name: str):
     
     # File definitions
     path_raw = reg_dir / f"reg_results_mode1_{exp_name}.json"
-    path_ne = reg_dir / f"report_stability_INDIVIDUAL_{exp_name}.json"
-    path_fov = reg_dir / f"report_stability_FOV_PAPER_{exp_name}.json"
+    path_ne = reg_dir / f"report_stability_NE_LABEL_{exp_name}.json"
+    path_fov = reg_dir / f"report_stability_FOV_{exp_name}.json"
     
     # Initialize Visualizer
     viz = ReportVisualizer(cfg_dict, output_dir=reg_dir)
@@ -212,7 +380,7 @@ def run_visualization(cfg_dict: dict, out_base: Path, exp_name: str):
     except Exception as e:
         logger.error(f"Visualization failed: {e}")
 
-# --- Main Function ---
+# --- Main Function --- #
 
 def run_pipeline(job_index: int, config_path: str, rerun: bool = False):
     log_format = f'%(asctime)s - JOB {job_index} - [%(name)s] - %(levelname)s - %(message)s'
@@ -326,4 +494,4 @@ def run_pipeline(job_index: int, config_path: str, rerun: bool = False):
 
 if __name__ == "__main__":
     # Local defaults for testing
-    run_pipeline(job_index=1, config_path="config_local.json", rerun=False)
+    run_pipeline(job_index=1, config_path="config_local_dual.json", rerun=False)

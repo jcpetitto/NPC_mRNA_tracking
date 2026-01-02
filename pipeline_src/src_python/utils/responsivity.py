@@ -10,9 +10,29 @@ import tifffile
 import matplotlib.pyplot as plt
 import scipy
 
-# bright_img_path - path to bright image (string)
-# dark_img_path - path to dark image (string)
 def detector_responsivity_determ(bright_img_path, dark_img_path):
+    """
+    Calculates detector gain and offset from bright/dark reference images.
+
+    Uses the mean-variance method where photon noise follows Poisson statistics:
+    Var(ADU) = (1/g) * Mean(ADU) + Var(read)
+
+    The slope of the Variance vs Mean plot is the inverse gain (1/g).
+
+    Parameters
+    ----------
+    bright_img_path : str
+        Path to the bright (flat-field) reference image.
+    dark_img_path : str
+        Path to the dark (offset) reference image.
+
+    Returns
+    -------
+    calibration_stats : dict
+        Dictionary containing gain, offset, and noise stats.
+    meanvar_plot_data : dict
+        Dictionary containing data for plotting the Mean-Variance curve.
+    """
     bright_image = tifffile.imread(bright_img_path)
     dark_image = tifffile.imread(dark_img_path)
     bg_var = np.var(dark_image)

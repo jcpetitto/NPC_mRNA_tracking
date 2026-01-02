@@ -22,8 +22,8 @@ from scipy.spatial.distance import cdist
 
 # --- Included Modules --- # 
 from utils.Neural_networks import Segment_NE
-from tools.utility_functions import sigmoid, plot_points_on_image, coord_of_crop_box, find_segments
-from tools.geom_tools import find_closest_u_on_spline, u_values_to_ranges, build_curve_bridge, angular_sort_alg, get_spline_arc_length, get_u_range_from_bspline
+from tools.utility_functions import sigmoid, coord_of_crop_box, find_segments
+from tools.geom_tools import angular_sort_alg, get_u_range_from_bspline
 
 
 # Initial detection
@@ -44,6 +44,34 @@ def detect_npc(img_track_path,
                plot_test_imgs = False,
                FoV_id = 'NNN',
                id_suffix = ''): # id suffix for use in multiple NE label situations
+    """
+    Performs initial coarse detection of Nuclear Pore Complexes (NPCs).
+
+    1. Loads the image track and computes the mean intensity projection.
+    2. Applies the segmentation model (`Segment_NE`) to generate a binary mask.
+    3. Identifies individual NE structures via connected components.
+    4. Fits initial splines to the skeletonized masks.
+
+    Parameters
+    ----------
+    img_track_path : str
+        Path to the TIFF file.
+    frame_range : tuple
+        (start, end) frame indices to use.
+    NE_model : str
+        Path to the trained PyTorch model weights.
+    device : torch.device
+        Torch device to perform inference on.
+    
+    Returns
+    -------
+    indiv_ne_cropped_imgs : dict
+        Dictionary of crop coordinates per NE label.
+    indiv_ne_bsplines : dict
+        Dictionary of initial B-splines per NE label.
+    npc_labeled_img : np.ndarray
+        The full-field labeled mask image.
+    """
     
     npc_track_img = tifffile.imread(img_track_path)[frame_range[0]:frame_range[1]]
     npc_img_mean = np.mean(npc_track_img, axis = 0)
@@ -72,6 +100,7 @@ def detect_npc(img_track_path,
         axes.imshow(npc_labeled_img, cmap='hot', interpolation='nearest', origin='upper')
         axes.set_title(f"All NE labels {FoV_id}{id_suffix}")
         fig.savefig(f'output/{FoV_id}{id_suffix}_all_ne_labels.png')
+# !!! FIX THE OUTPUT HERE TO BE CONFIG
     
 
     # get all unique label values and the count per label
@@ -294,7 +323,11 @@ def single_ne_init_fit(current_ne_label_img: np.ndarray, current_ne_intensity_ma
         try:
             # Fit a non-periodic spline to *this segment only*
             # s=0 to interpolate (it was smoothed during its initial creation)
-            bspline_obj, _ = make_splprep([seg_coords_yx[1, :], seg_coords_yx[0, :]], u=u_segment, s=0, k=3)
+            bspline_temp, _ = make_splprep([seg_coords_yx[1, :], seg_coords_yx[0, :]], u=u_segment, s=0, k=3)
+            evaluated_points = bspline_temp(u_segment)  # Evaluate at correct parameters
+            u_uniform = np.linspace(0, 1, len(u_segment))  # Create uniform [0, 1]
+            bspline_obj, _ = make_splprep([evaluated_points[0], evaluated_points[1]], u=u_uniform, s=0, k=3)
+
 
             # Store this bspline object in the spline segment dictionary
             segment_spline_dict.update({f'{segment_label}': bspline_obj})

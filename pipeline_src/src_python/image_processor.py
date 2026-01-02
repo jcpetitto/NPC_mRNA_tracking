@@ -23,7 +23,7 @@ import logging
 # import supporting pipeline classes (if any)
 from utils.ne_improved_pairing import improved_ne_crop_and_pair
 from tools.utility_functions import dict_update_or_replace, find_shared_keys, filter_channels_by_label_map
-from tools.geom_tools import bspline_transformation, reconstruct_periodic_spline
+from tools.geom_tools import bspline_transformation
 from utils.spline_bridging import bridge_refined_splines
 from utils.responsivity import detector_responsivity_determ
 from utils.img_registration import image_registration, calculate_mode_reg_stats, calculate_drift_map, build_ne_stability_report, calculate_fov_population_stats, build_fov_stability_report, generate_stability_comparison_report
@@ -34,9 +34,28 @@ from utils.distance_logging import DistanceCalculationLogger
 
 logger = logging.getLogger(__name__)
 
-# from utils.npc_spline_refinement import NESplineRefiner
+
 # TODO update ALL times a path is used to load something to os.join or what have you
 class ImageProcessor:
+    """
+        Central orchestrator for the nuclear envelope analysis pipeline.
+
+        This class manages the lifecycle of a dataset, from loading raw image tracks 
+        to initial detection, spline refinement, bridging, and dual-channel registration. 
+        It acts as the primary state container, holding the configuration, FoV definitions, 
+        and all intermediate processing results.
+
+        Parameters
+        ----------
+        config_dict : dict
+            The master configuration dictionary containing paths and parameters.
+        FoV_dict : dict
+            Dictionary defining the Fields of View (FoVs) to be processed.
+        device : torch.device, optional
+            The torch device to use for computation. Default is 'cpu'.
+        threshold_regist : float, optional
+            Threshold value for image registration. Default is 0.5.
+        """
 
     # --- Primary Image Processing Functions --- #
     def __init__(self, config_dict, FoV_dict, device = torch.device('cpu'), threshold_regist = 0.5):
@@ -87,14 +106,21 @@ class ImageProcessor:
         
         print('Image Processor initiated')
 
-    
-
-    
-
     # --- Pipes --- #
-    # ----- Responsivity ---- #
+    ## ----- Responsivity ---- ##
     # SELF - extend to N channels (not a priority for current use case)
     def determine_responsivity(self):
+        """
+            Calculates and stores detector responsivity statistics.
+
+            Loads bright (gain) and dark (offset) reference images defined in the config,
+            calculates the gain and offset, and updates the internal state.
+
+            Returns
+            -------
+            None
+                Updates ``self._drd_stats`` and ``self._drd_meanvar``.
+            """
         # Detector Responsivity Determination
         #   uses bright (gain) and dark (offset) image pair
         #   return calibration statistics as well as mean/variance
@@ -126,6 +152,25 @@ class ImageProcessor:
     # ----- Initial NE Fitting ---- #
     # sets initial fit in motion and directs the results to the appropriate class variables
     def run_init_ne_detection(self, FoV_list=[], add_to_existing = True):
+        """
+        Executes the initial Nuclear Envelope (NE) detection pipeline.
+
+        This method identifies NE candidates in the specified FoVs using the configured
+        neural network model. If dual-label mode is active, it processes both channels
+        and pairs them based on spatial overlap (IoU).
+
+        Parameters
+        ----------
+        FoV_list : list of str, optional
+            A list of specific FoV IDs to process. If empty, processes all loaded FoVs.
+        add_to_existing : bool, optional
+            Whether to append results to existing state. Default is True.
+
+        Returns
+        -------
+        None
+            Updates internal state (cropped images, initial b-splines, labeled masks).
+        """
         # if FoV_list is non-empty (ie. contains 1+ FoV_id strings) then this runs for that subset of FoV_ids, otherwise, this step is run for all FoV loaded into existing FoV collection for this ImageProcessor instance
         print("--- Detecting Nuclear Envelope ----")
         if len(FoV_list) != 0:
@@ -258,8 +303,27 @@ class ImageProcessor:
 
     def run_ne_refinement(self, partial_ch1_path, partial_ch2_path, load_checkpoint_func, save_checkpoint_func):
         """
-        Runs the Spline Refinement step with robust, per-FoV checkpointing.
-        The looping and partial saving logic is encapsulated here.
+        Runs the spline refinement step with robust, per-FoV checkpointing.
+
+        This method iterates through all FoVs requiring refinement. It employs a 
+        restartable loop pattern, saving progress to disk after each FoV to prevent 
+        data loss during long processing runs.
+
+        Parameters
+        ----------
+        partial_ch1_path : Path or str
+            File path for saving/loading Channel 1 partial results.
+        partial_ch2_path : Path or str
+            File path for saving/loading Channel 2 partial results.
+        load_checkpoint_func : callable
+            Callback function to load a checkpoint file.
+        save_checkpoint_func : callable
+            Callback function to save a dictionary to a checkpoint.
+
+        Returns
+        -------
+        None
+            Populates ``self._ch1_refined_bsplines`` and ``self._ch2_refined_bsplines``.
         """
         print("--- Refining NE Splines (with restartable loop) ---")
         
@@ -330,7 +394,7 @@ class ImageProcessor:
         self._set_ch1_refined_bsplines(ch1_refined_splines)
         self._set_ch2_refined_bsplines(ch2_refined_splines)
 
-        logger.info(f"DIAGNOSTIC - After storing:")
+        logger.info("DIAGNOSTIC - After storing:")
         logger.info(f"  self._ch1_refined_bsplines has {len(self._ch1_refined_bsplines)} FoVs")
         logger.info(f"  self._ch2_refined_bsplines has {len(self._ch2_refined_bsplines)} FoVs")
         
@@ -933,16 +997,25 @@ class ImageProcessor:
 
     def analyze_ne_reg_stability(self, prune=False):
         """
-        Orchestrates the Registration Stability analysis.
+        Performs a stability audit of the image registration per nucleus.
 
         Methodology:
         1. Loads Mode 1 (Pre) and Mode 2 (Post) registration data.
         2. Calculates Drift (Mode 2 - Mode 1) and Combined Precision (Sigma).
         3. Filters nuclei where Drift > 2 * Precision.
         
-        Returns:
-            report (dict): Full status report with metrics for every nucleus.
-            pairs_map (dict): The active (pruned) pairs map used by the pipeline.
+        Parameters
+        ----------
+        prune : bool, optional
+            If True, removes unstable nuclei from the active processing map. 
+            Default is False.
+
+        Returns
+        -------
+        report : dict
+            Full status report with metrics for every nucleus.
+        pairs_map : dict
+            The active (possibly pruned) pairs map.
         """
         logger.info("--- Analyzing Registration Stability (Temporal / Individual Nuclear Envelopes) ---")
 

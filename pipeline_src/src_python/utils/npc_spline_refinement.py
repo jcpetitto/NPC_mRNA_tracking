@@ -5,14 +5,9 @@ Created on Mon Jun 23 08:51:23 2025
 @author: jctourtellotte
 """
 
-# --- Outside Modules --- #
-# import tifffile
-# import math
 import os
 import signal
 import torch
-# import torch.nn as nn
-# import torch.optim as optim
 import traceback
 from pathlib import Path
 import theseus as th
@@ -24,8 +19,8 @@ import pandas as pd
 from datetime import datetime
 
 # --- Included Modules --- #
-from tools.utility_functions import calc_tangent_endpts, extract_cropped_images, sample_bspline
-from tools.geom_tools import get_u_range_from_bspline, bspline_from_tck
+from tools.utility_functions import calc_tangent_endpts, extract_cropped_images
+from tools.geom_tools import get_u_range_from_bspline, calculate_tangent_angle_changes
 
 from utils.MLEstimation import model_error_func, construct_rich_gaus_initial_guess, construct_gaus_lin_initial_guess, MODEL_REGISTRY
 
@@ -34,8 +29,32 @@ def _timeout_handler(signum, frame):
     raise TimeoutError("Theseus optimization call timed out.")
 
 class NESplineRefiner:
+    """
+        Refines initial B-spline contours using intensity profile optimization.
+
+        This class handles the extraction of intensity profiles along the normals of 
+        an initial spline guess and uses the ``Theseus`` library to optimize the 
+        spline position to match a theoretical membrane profile (Gaussian or Richards-Gaussian).
+
+        Parameters
+        ----------
+        channel : str
+            The image channel identifier (e.g., 'ch1').
+        img_path : str
+            Path to the source image track.
+        fov_id : str
+            Unique identifier for the Field of View.
+        FoV_ne_crop_box_entry : dict
+            Dictionary containing crop coordinates for this FoV.
+        config_dict : dict
+            Configuration dictionary containing 'ne_fit' parameters.
+        device : torch.device, optional
+            Torch device for optimization. Default is 'cpu'.
+        camera_gain : float, optional
+            Detector gain in e-/ADU. Default is 1.0.
+        """
     # Class - Why? bc image loading and mean frame config etc
-    # def __init__(self, img_path, FoV_initial_fit_entry, FoV_initial_bspline_entry, FoV_ne_crop_box_entry, config_dict, device = torch.device('cpu')):
+
     def __init__(self, channel, img_path, fov_id, FoV_ne_crop_box_entry, config_dict, device = torch.device('cpu'), camera_gain = 1.0):
         print('initiating Spline Refinement')
         self._channel = channel
@@ -81,6 +100,29 @@ class NESplineRefiner:
 
 
     def refine_initial_bsplines(self, initial_bsplines, testing_mode = False):
+        """
+        Main entry point for refining a batch of initial B-splines.
+
+        Iterates through every segment of every NE label provided, extracts intensity
+        profiles, and attempts to fit the configured model.
+
+        Parameters
+        ----------
+        initial_bsplines : dict
+            Dictionary of initial splines keyed by NE label.
+        testing_mode : bool, optional
+            If True, runs in a lightweight testing mode. Default is False.
+
+        Returns
+        -------
+        final_refined_splines_dict : dict
+            Dictionary of refined splines.
+        segment_log : list of dict
+            List of log dictionaries (one per profile).
+        quality_metadata : dict
+            Dictionary of quality metadata.
+        """
+        
         channel = self._get_channel()
         FoV_id = self._get_FoV_id()
         cropped_imgs = self._get_ne_imgs()
@@ -274,14 +316,33 @@ class NESplineRefiner:
                     refined_points[0, :] = np.clip(refined_points[0, :], x_min, x_max)
                     refined_points[1, :] = np.clip(refined_points[1, :], y_min, y_max)
 
-                    bspline_refined, _ = make_splprep([refined_points[0, :], refined_points[1, :]], s=1.0, k=3)
+                    # Remove duplicate points caused by clipping (stacking at boundaries)
+                    diffs = np.diff(refined_points, axis=1)
+                    dists = np.linalg.norm(diffs, axis=0)
+
+                    # Keep points that are at least 1e-6 pixels apart from the next one
+                    # Always keep the last point
+                    keep_mask = np.hstack([dists > 1e-6, True])
+
+                    # Update refined_points to only include distinct points
+                    refined_points_cleaned = refined_points[:, keep_mask]
+                    
+                    # Check if we still have enough points for a cubic spline (k=3 requires >= 4 points)
+                    if refined_points_cleaned.shape[1] <= 3:
+                        print(f"    Skipping {seg_label}: Not enough distinct points after clipping ({refined_points_cleaned.shape[1]})")
+                        continue
+
+                    bspline_refined, _ = make_splprep(
+                        [refined_points_cleaned[0, :], refined_points_cleaned[1, :]], 
+                        s=1.0, 
+                        k=3
+                    )
                     
                     # STEP 3: Validate control points are within acceptable bounds
-                    bspline_obj = bspline_from_tck(bspline_refined)
                     
                     # Check control points with slightly tighter bounds
-                    ctrl_x_min, ctrl_x_max = bspline_obj.c[:, 0].min(), bspline_obj.c[:, 0].max()
-                    ctrl_y_min, ctrl_y_max = bspline_obj.c[:, 1].min(), bspline_obj.c[:, 1].max()
+                    ctrl_x_min, ctrl_x_max = bspline_refined.c[:, 0].min(), bspline_refined.c[:, 0].max()
+                    ctrl_y_min, ctrl_y_max = bspline_refined.c[:, 1].min(), bspline_refined.c[:, 1].max()
                     
                     # Allow slightly larger margin for control points (smoothing can extrapolate a bit)
                     ctrl_margin = 20  # pixels
@@ -305,9 +366,8 @@ class NESplineRefiner:
                                 k=3
                             )
                             
-                            bspline_obj = bspline_from_tck(bspline_refined)
-                            ctrl_x_min, ctrl_x_max = bspline_obj.c[:, 0].min(), bspline_obj.c[:, 0].max()
-                            ctrl_y_min, ctrl_y_max = bspline_obj.c[:, 1].min(), bspline_obj.c[:, 1].max()
+                            ctrl_x_min, ctrl_x_max = bspline_refined.c[:, 0].min(), bspline_refined.c[:, 0].max()
+                            ctrl_y_min, ctrl_y_max = bspline_refined.c[:, 1].min(), bspline_refined.c[:, 1].max()
                             
                             ctrl_bounds_ok = (
                                 ctrl_x_min >= -ctrl_margin and ctrl_x_max <= 75 + ctrl_margin and
@@ -407,9 +467,29 @@ class NESplineRefiner:
     
     def _optimize_single_profile_adaptive(self, single_intensity_profile, single_dist_profile, model_name):
         """
-        Attempts optimization with adaptive step size strategy.
+        Optimizes a single intensity profile using an adaptive Levenberg-Marquardt and an adaptive step size strategy.
+        Step sizes are progressively smaller (1.0, 0.5, 0.1, 0.01) until convergence is achieved or all attempts fail.
+
+        Parameters
+        ----------
+        single_intensity_profile : np.ndarray
+            The extracted intensity values.
+        single_dist_profile : np.ndarray
+            The distances along the normal vector.
+        model_name : str
+            The name of the model to fit (e.g., 'richards_gaussian').
+
+        Returns
+        -------
+        mu_result : float
+            The optimized position parameter.
+        status : str
+            Status string (e.g., "success", "fail:timeout").
+        predicted_intensity : np.ndarray
+            The model's predicted intensity profile.
         
-        Reference:
+        References
+        ----------
             Marquardt (1963) - Adaptive damping improves convergence
             in ill-conditioned problems by adjusting between gradient
             descent (large λ) and Gauss-Newton (small λ).
@@ -875,16 +955,36 @@ class NESplineRefiner:
     
     def _check_fit_quality_likelihood_ratio(self, predicted, observed, gain=1.0, n_params=11, threshold_delta_aic=10):
         """
-        Likelihood ratio test for fit quality assessment.
-        
+        Assesses fit quality using a Generalized Likelihood Ratio Test (GLRT) via AIC.        
         Compares the fitted model against a null model (constant background).
         Uses Akaike Information Criterion (AIC) to penalize model complexity.
+
+        Delta AIC = AIC_null - AIC_fitted
         
         This approach is more appropriate for complex multi-parameter models
         than fixed outlier thresholds, and is consistent with GLRT-based
         particle detection used elsewhere in the pipeline.
         
-        References:
+        Parameters
+        ----------
+        predicted : np.ndarray
+            Model prediction in ADU.
+        observed : np.ndarray
+            Observed data in ADU.
+        gain : float, optional
+            Camera gain in e-/ADU. Default is 1.0.
+        n_params : int, optional
+            Number of free parameters in the model. Default is 11.
+        threshold_delta_aic : float, optional
+            Minimum AIC improvement required. Default is 10.
+
+        Returns
+        -------
+        bool
+            True if the model fit is significantly better than the null hypothesis.
+
+        References
+        ----------
             1. Ober, R.J., Ram, S. & Ward, E.S. (2004). "Localization accuracy in 
             single-molecule microscopy." Biophysical Journal, 86(2), 1185-1200.
             - Establishes likelihood ratio framework for localization quality
@@ -965,47 +1065,42 @@ class NESplineRefiner:
         
         return is_good_fit
 
-    def identify_nonphysical_regions(self, spline_points, spline_derivs, max_angle_change_deg=1.0):
+    def identify_nonphysical_regions(spline_points, spline_derivs, max_angle_change_deg=1.0):
         """
         Identify regions of spline with non-physical curvature.
         
-        The nuclear envelope has bending modulus κ ≈ 10-20 k_BT, giving persistence 
-        length L_p ≈ 50-100 nm. At sampling distance ~20 nm, expected angular 
-        deviation is ~0.3°. We use 1° threshold (3× safety margin).
-        
-        References:
-            1. Zimmerberg, J. & Kozlov, M.M. (2006). "How proteins produce cellular 
-            membrane curvature." Nature Reviews Molecular Cell Biology, 7(1), 9-19.
-            - Box 1: Membrane bending modulus κ ≈ 10-20 k_BT
+        Parameters
+        ----------
+        spline_points : np.ndarray
+            (2, N) array of [x, y] or [y, x] coordinates.
+        spline_derivs : np.ndarray
+            (2, N) array of tangent vectors.
+        max_angle_change_deg : float, optional
+            Maximum allowed angle change (degrees). Default is 1.0.
             
-            2. Helfrich, W. (1973). "Elastic properties of lipid bilayers: theory 
-            and possible experiments." Zeitschrift für Naturforschung C, 
-            28(11-12), 693-703.
-            - Bending energy theory: E = (κ/2) ∫(c₁ + c₂)² dA
-        
-        Args:
-            spline_points: (2, N) array of [y, x] coordinates
-            spline_derivs: (2, N) array of tangent vectors
-            max_angle_change_deg: Maximum allowed angle change between consecutive points
+        Returns
+        -------
+        valid_mask : np.ndarray
+            (N,) boolean array, True for physically reasonable points.
+        angle_changes_deg : np.ndarray
+            (N-1,) array of angle changes in degrees.
             
-        Returns:
-            valid_mask: (N,) boolean array, True for physically reasonable points
-            angle_changes_deg: (N-1,) array of angle changes in degrees
+        References
+        ----------
+        See tools.geom_tools.calculate_tangent_angle_changes for physical justification and citations.
         """
-    
-        # Calculate tangent angles
-        angles = np.arctan2(spline_derivs[1, :], spline_derivs[0, :])
         
-        # Angle differences (normalized to [-π, π])
-        angle_diffs = np.diff(angles)
-        angle_diffs = (angle_diffs + np.pi) % (2 * np.pi) - np.pi
-        angle_changes_deg = np.abs(np.rad2deg(angle_diffs))
+        # Calculate angle changes using provided derivatives
+        angle_changes_deg, _ = calculate_tangent_angle_changes(
+            derivs=spline_derivs,
+            max_angle_change_deg=max_angle_change_deg
+        )
         
         # Flag transitions that exceed threshold
         bad_transitions = angle_changes_deg > max_angle_change_deg
         
         # Mark points on BOTH sides of bad transition as invalid
-        valid_mask = np.ones(len(angles), dtype=bool)
+        valid_mask = np.ones(spline_points.shape[1], dtype=bool)
         bad_indices = np.where(bad_transitions)[0]
         
         for idx in bad_indices:

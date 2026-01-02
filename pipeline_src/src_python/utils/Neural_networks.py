@@ -50,7 +50,25 @@ import numpy as np
 import torchvision.transforms as T
 
 class Segment_NE(pl.LightningModule):
+    """
+    PyTorch Lightning module for binary Nuclear Envelope segmentation.
 
+    Wraps a model from `segmentation_models_pytorch` (SMP) with training,
+    validation, and testing loops.
+
+    Parameters
+    ----------
+    arch : str
+        Architecture name (e.g., 'FPN', 'Unet').
+    encoder_name : str
+        Name of the encoder (e.g., 'resnet34').
+    in_channels : int
+        Number of input channels.
+    out_classes : int
+        Number of output classes (1 for binary).
+    **kwargs
+        Additional arguments passed to `smp.create_model`.
+    """
     # initialization method (arch = model to be created, encoder_name = model to be used)
     def __init__(self, arch, encoder_name, in_channels, out_classes, **kwargs):
 
@@ -76,6 +94,22 @@ class Segment_NE(pl.LightningModule):
 
     # compute mask
     def forward(self, image):
+        """
+        Forward pass of the network.
+
+        Normalizes the input image using the encoder's pre-calculated mean/std
+        buffers before passing it to the model.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Input tensor of shape (B, C, H, W).
+
+        Returns
+        -------
+        torch.Tensor
+            Logits mask.
+        """
         # normalize image using buffers
         image = (image - self.mean) / self.std
 
@@ -386,6 +420,17 @@ class Unet_pp(nn.Module):
         return x0_3
 
 class Unet_pp_timeseries(nn.Module):
+    """
+    U-Net++ variant adapted for time-series data.
+
+    Includes a dynamic first convolutional layer to adapt to varying input channel 
+    depths (time points) before entering the standard encoder path.
+
+    Parameters
+    ----------
+    channels : int
+        Number of input channels (time points).
+    """
     def __init__(self, channels):
         super().__init__()
 
