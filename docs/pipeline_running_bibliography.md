@@ -95,6 +95,15 @@
 
 ### Robust Statistics
 
+**Huber, P.J. & Ronchetti, E.M. (2009)**. *Robust Statistics*, 2nd edition. Wiley.
+- **Tags:** `[STAT]`
+- **Context:** Comprehensive robust statistics theory
+- **Key Content:**
+  - M-estimators and their properties
+  - Influence functions and breakdown points
+- **Relevance:** Theoretical foundation for outlier-resistant methods
+- **Cross-Reference:** See Rousseeuw & Croux (1993) for specific MAD applications
+
 **Rousseeuw, P.J. & Croux, C. (1993)**. "Alternatives to the median absolute deviation." *Journal of the American Statistical Association*, 88(424), 1273-1283.
 - **Tags:** `[STAT]`
 - **Context:** Robust estimation of scale
@@ -104,15 +113,6 @@
 - **Implementation:** Registration stability analysis uses MAD-based filtering
 - **Advantage:** Resistant to outliers (50% breakdown point)
 - **Cross-Reference:** See Huber & Ronchetti (2009) for general robust methods
-
-**Huber, P.J. & Ronchetti, E.M. (2009)**. *Robust Statistics*, 2nd edition. Wiley.
-- **Tags:** `[STAT]`
-- **Context:** Comprehensive robust statistics theory
-- **Key Content:**
-  - M-estimators and their properties
-  - Influence functions and breakdown points
-- **Relevance:** Theoretical foundation for outlier-resistant methods
-- **Cross-Reference:** See Rousseeuw & Croux (1993) for specific MAD applications
 
 ### False Discovery Rate Control
 
@@ -487,8 +487,8 @@
 **Decision:** Filter nuclei with registration error > 2σ (population-based)
 **Method:** MAD-based robust standard deviation estimation
 **Citations:**
-- Rousseeuw & Croux (1993) - MAD as robust scale estimator
 - Huber & Ronchetti (2009) - Robust statistics theory
+- Rousseeuw & Croux (1993) - MAD as robust scale estimator
 **Alternatives Considered:**
 1. Hard-coded pixel threshold (REJECTED - arbitrary, ignores experiment-specific noise)
 2. Benjamini-Yekutieli FDR (CONSIDERED - for multiple comparisons)
@@ -586,23 +586,6 @@ Each method was selected based on:
 **Distance Calculation:**
 → Preparata & Shamos (1985), O'Rourke (1998), Huang et al. (2009)
 
----
-
-## FUTURE WORK & ADDITIONAL REFERENCES
-
-### Potential Enhancements
-
-**Bayesian Parameter Estimation:**
-- Gelman, A., Carlin, J.B., Stern, H.S., Dunson, D.B., Vehtari, A. & Rubin, D.B. (2013). *Bayesian Data Analysis*, 3rd edition. CRC Press.
-- Could provide uncertainty quantification for all fitted parameters
-
-**Hierarchical Modeling:**
-- Hastie, T., Tibshirani, R. & Friedman, J. (2009). *The Elements of Statistical Learning*, 2nd edition. Springer.
-- Could model experiment-to-experiment variability systematically
-
-**GPU Acceleration:**
-- Sanders, J. & Kandrot, E. (2010). *CUDA by Example*. Addison-Wesley.
-- Could speed up refinement optimization loops
 
 ---
 
