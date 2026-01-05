@@ -1,5 +1,4 @@
-# Fluorescence Microscopy > Processing and Analysis Pipeline for Imaging Data
-# > Single particle tracking (mRNA) and translocation through NPCs in *S. cerevisiae*
+# Fluorescence Microscopy > Processing and Analysis Pipeline for Imaging Data > Single particle tracking (mRNA) and translocation through NPCs in *S. cerevisiae*
 
 > Production-quality pipeline for automated nuclear envelope morphology analysis
 > from dual-channel fluorescence microscopy with statistical rigor and FAIR
