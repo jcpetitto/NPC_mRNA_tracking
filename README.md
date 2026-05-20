@@ -22,11 +22,6 @@ architecture is designed to support diverse membrane analysis applications.
 production-ready, FAIR-compliant software demonstrating research software
 engineering best practices.
 
-**Documentation Status:** Complete [Configuration
-Reference](docs/configuration.md) and
-[Bibliography](docs/methodology/bibliography.md) available now. Additional user
-guides and tutorials in development.
-
 --------------------------------------------------------------------------------
 
 ## Features
