@@ -62,9 +62,6 @@ guides and tutorials in development.
 
 #### Configuration
 
-Create a JSON configuration file (see [**Configuration
-Guide**](docs/configuration.md) for complete reference):
-
 ``` json
 {
     "pipe globals": {
@@ -96,11 +93,6 @@ Guide**](docs/configuration.md) for complete reference):
 
 #### Output / Results
 
-Pipeline generates: - **PDF Reports** - Visual quality control and registration
-statistics - **Refined Splines** - Sub-pixel accurate nuclear envelope
-boundaries - **Distance Measurements** - Quantified separation between
-fluorescent labels - **Quality Metrics** - Comprehensive validation statistics
-
 Output structure:
 
 ```         
@@ -116,20 +108,11 @@ output_root/
 
 ## Documentation
 
-### Available Now
-
-[**Complete Configuration Reference**](docs/configuration.md) - Every parameter
-documented with citations - Scientific justification for defaults - When to
-change settings - Example configurations for different use cases - Validation
-and troubleshooting
-
-[**Complete Bibliography**](docs/methodology/bibliography.md) - 50+
-peer-reviewed citations - Organized by research context - Cross-referenced by
-parameter - Statistical method justifications
-
 ### In Development
 
 -   Installation guide
+-   Configuration Reference
+-   Bibliography of statistical method justifications
 -   User guide (data preparation, running pipeline, troubleshooting)
 -   Methodology documentation (detailed algorithm descriptions)
 -   Developer guide (architecture, contributing, testing)
@@ -209,19 +192,6 @@ morphology in disease models - mRNA transport dynamics through NPCs
 -   **Scalability:** Checkpoint/resume enables analysis of 100+ nuclei per
     experiment
 
-### Methodological Improvements Over Prototype
-
-| Aspect                  | Research Prototype   | Production Pipeline     | Improvement    |
-|-------------------|---------------------|-----------------------|-------------------|
-| **Code Duplication**    | \~1,130 lines        | 0 lines                 | 100% reduction |
-| **Parameter Citations** | 0/78                 | 78/78                   | 100%           |
-| **Configuration**       | 12+ variants         | 1 standard              | Unified        |
-| **Statistical Rigor**   | Arbitrary thresholds | Citation-backed methods | Validated      |
-
-See **Evolution Document** *(in development)* for detailed technical comparison.
-
---------------------------------------------------------------------------------
-
 ## Project Evolution
 
 ### Research Prototype (2021-2023)
@@ -230,9 +200,9 @@ See **Evolution Document** *(in development)* for detailed technical comparison.
 -   Validated approach on biological data
 -   Generated initial publication results
 
-### Production Engineering (2024-2025)
+### Production Engineering (2024-PRESENT)
 
-Systematic transformation for open-source release:
+Systematic transformation underway for open-source release:
 
 **Architecture:** - Monolithic scripts → Modular object-oriented design -
 Hard-coded parameters → JSON configuration system - Minimal docs → Comprehensive
@@ -251,157 +221,6 @@ transforming exploratory code into sustainable, community-ready tools.
 
 --------------------------------------------------------------------------------
 
-## Citation
-
-If you use this pipeline in your research, please cite:
-
-``` bibtex
-@software{ne_pipeline_2025,
-  author = {Petitto, Jocelyn},
-  title = {Pipeline for the Analysis of Fluorescence Microscopy Imaging Data with respect single particle track},
-  year = {2025},
-  version = {2.0.0}
-}
-```
-
-**For specific methods, see [Bibliography](docs/methodology/bibliography.md) for
-complete citations.**
-
---------------------------------------------------------------------------------
-
-## Examples
-
-### Configuration Examples
-
-**See [Configuration Guide](docs/configuration.md)** for complete example
-configurations including:
-
--   **Dual-label analysis** - Standard workflow configuration
--   **Cluster computing** - HPC batch processing setup
-
-Each example includes complete JSON configuration with explanations.
-
---------------------------------------------------------------------------------
-
-## Performance
-
-### Bottlenecks
-
--   **CPU-bound:** Spline refinement optimization
--   **I/O-bound:** Large dataset loading
--   **GPU-accelerated:** U-Net++ inference (10× speedup)
-
-### Optimization Tips
-
--   Enable GPU for U-Net++ (automatic if detected by config.py)
--   Use checkpoint/resume for cluster computing
--   Reduce `frames_per_average` for faster testing
--   Process experiments in parallel with job arrays
-
---------------------------------------------------------------------------------
-
-## Troubleshooting
-
-### Common Issues
-
-**"CUDA not available"** - Verify GPU drivers installed - Install
-CUDA-compatible PyTorch - Pipeline runs on CPU if GPU unavailable (slower but
-functional)
-
-**"Directory not found"** - Check `strains` names match actual folder names -
-Verify all paths in configuration are absolute - Ensure experiment folders
-follow expected structure
-
-**"Registration failed for FOV_XXXX"** - Normal for 5-10% of FOVs (stage drift,
-focus issues) - Pipeline continues processing remaining FOVs - Check PDF report
-for quality metrics
-
-**Pipeline crashes mid-refinement** - Use checkpoint/resume: rerun same
-command - Pipeline automatically resumes from last completed FOV - Check
-available RAM (refinement memory-intensive)
-
-### Getting Help
-
--   **Configuration Questions:** See [Configuration
-    Guide](docs/configuration.md)
--   **Method/Citation Questions:** See
-    [Bibliography](docs/methodology/bibliography.md)
--   **Bug Reports:** Open an issue on GitHub
--   **Direct Contact:** jocelyn.tourtellotte\@umassmed.edu
-
---------------------------------------------------------------------------------
-
-## Contributing
-
-We welcome contributions! Areas of particular interest:
-
--   **Testing:** Additional unit/integration tests
--   **Documentation:** Usage examples, tutorials, walkthroughs
--   **Validation:** Benchmark datasets with ground truth
--   **Extensions:** 3D imaging support, additional profile models
--   **Performance:** GPU acceleration, parallel processing optimization
-
-*Contribution guidelines and code of conduct in development.*
-
---------------------------------------------------------------------------------
-
-## Development Status
-
--   ✅ **Core Pipeline:** Stable, production-ready
--   ✅ **Dual-Label Analysis:** Fully implemented and tested
--   ✅ **Checkpoint/Resume:** Robust FOV-level checkpointing
--   ✅ **Quality Control:** Automated PDF reporting
--   🚧 **Quality Assurance:** - Automated testing with code coverage tracking
-    and regression testing
--   🚧 **mRNA Tracking:** In development (particle detection implemented)
-
---------------------------------------------------------------------------------
-
-## Technical Highlights
-
-### Software Engineering Best Practices
-
-**Architecture:** - Object-oriented design with single responsibility
-principle - Dependency injection for testability - Configuration-driven (no
-hard-coded parameters) - Modular components for reusability
-
-**Reproducibility:** - Complete parameter documentation - FAIR data principles -
-Version control with semantic versioning - Deterministic results (fixed random
-seeds where applicable)
-
-**HPC Optimization:** - Checkpoint/resume for long-running jobs - Batch
-processing with job arrays - Memory-efficient streaming for large datasets -
-Parallel-ready architecture
-
-### Statistical Rigor
-
-**Decision parameters have, where applicable:** 1. **Citation(s)** -
-Peer-reviewed scientific justification 2. **Validation** - Tested on real
-biological data 3. **Alternative analysis** - Why this method over others 4.
-**Parameter sensitivity** - When to adjust defaults
-
-**Example: Outlier Detection** - **Method:** Likelihood Ratio Test with AIC
-(Smith et al. 2010) - **Replaces:** Hard-coded 5% threshold (arbitrary) -
-**Decision rule:** ΔAIC \> 2 indicates significant model improvement
-
-See [**Bibliography**](docs/methodology/bibliography.md) for complete citation
-list.
-
---------------------------------------------------------------------------------
-
-## Acknowledgments
-
-**Institution:** - RNA Therapeutics Institute, University of Massachusetts Chan
-Medical School
-
-**Collaborators:** - - Grunwald Lab (microscopy infrastructure)
-
-**Original Proof-of-Concept:** - Graduate student research (2021-2023)
-demonstrated algorithmic feasibility
-
-**Software Engineering:** - Systematic refactoring for open-source release
-(2024-2025) - Transformation from research prototype to production software
-
 --------------------------------------------------------------------------------
 
 ## License
@@ -418,38 +237,12 @@ details.
 
 --------------------------------------------------------------------------------
 
-## Project Information
-
--   **Documentation:** See `docs/` directory in repository
-
---------------------------------------------------------------------------------
-
-## Version History
-
-### Version 2.0.0 (2025)
-
--   Complete production refactoring
--   Modular object-oriented architecture
--   Comprehensive testing suite
--   Statistical rigor (LRT, AIC, robust methods)
--   FAIR compliance
--   Checkpoint/resume system
--   Complete documentation
-
-### Version 1.0 (2023)
-
--   Research prototype
--   Proof-of-concept implementation
--   Initial results
-
---------------------------------------------------------------------------------
 
 ## Contact
 
 **Maintainer:** Jocelyn Petitto (formerly Tourtellotte)\
 **Email:** jocelyn.petitto\@gmail.com\
 **Institution:** RNA Therapeutics Institute, UMass Chan Medical School\
-**ORCID:** \[Add your ORCID ID\]
 
 --------------------------------------------------------------------------------
 
@@ -457,8 +250,4 @@ details.
 **Pipeline Version:** 2.0.0\
 **Python Version:** 3.11+
 
---------------------------------------------------------------------------------
 
-*This pipeline demonstrates research software engineering expertise:
-transforming exploratory research code into production-quality, FAIR-compliant
-tools that enable reproducible science and community adoption.*
