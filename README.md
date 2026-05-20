@@ -16,7 +16,7 @@ This pipeline processes and analyzes imaging data collected using fluorescence
 microscopy into quantitative measurements of the nuclear pore complex (NPC) via
 labeling of pairs of nucleoporins (Nups) with sub-pixel precision. Originally
 developed for studying translocation of mRNA through NPC in yeast, the modular
-architecture supports diverse membrane analysis applications.
+architecture is designed to support diverse membrane analysis applications.
 
 **Key Innovation:** Systematic transformation from research prototype to
 production-ready, FAIR-compliant software demonstrating research software
